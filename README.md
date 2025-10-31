@@ -1,4 +1,4 @@
-[![GitHub license](https://img.shields.io/badge/license-MIT-green)](https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/blob/main/LICENSE)
+[![GitHub license](https://img.shields.io/badge/license-GNU-green)](https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/blob/main/LICENSE)
 ## RU
 # 🔐 CNS-SOWA-SECURITY 🔐
 

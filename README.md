@@ -1,5 +1,4 @@
 [![GitHub license](https://img.shields.io/badge/license-MIT-green)](https://github.com/AristarhUcolov/Global-Content-Guard/LICENSE)
-
 ## RU
 # 🔐 CNS-SOWA-SECURITY 🔐
 

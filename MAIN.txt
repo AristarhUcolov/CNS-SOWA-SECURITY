@@ -1,0 +1,13 @@
+! =============================================================================================================================
+! Title: CNS-SOWA-SECURITY
+! =============================================================================================================================
+! Description: S.O.W.A Security Software - The Future Of DNS-Protection-Filtering & Protection People with DNS Protections & Extensions
+! Goal: Protect The All People of The World to be Safe in Digital-Area to make Safer-Protection for People
+! All Protection by FreeLance - Organization C.N.S [ Clear-Net-Sky ] colaborated with S.A & OpcoderZ-Security
+! All sites is added by C.N.S Teams & Supporters
+! If you want to fix, upgrade or to make Software much better, write or upload on the Requests/Issues and be a part of Future Digital Security Project.
+! =============================================================================================================================
+! Clear Net Sky Page: https://aristarhucolov.github.io/C.N.S-Clear.Net.Sky-S.O.W.A/
+! S.O.W.A Security Software: https://github.com/AristarhUcolov/CNS-SOWA-SECURITY
+! Main Page Of The BlackList: https://github.com/AristarhUcolov/CNS-SOWA-DNS-BLACKLIST-FILTERING
+! =============================================================================================================================

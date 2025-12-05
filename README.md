@@ -47,7 +47,7 @@
 
 ### 🎯 Project Goal
 
-To protect all people around the world in the digital space, creating safer protection for everyone.
+To protect all people around the world in the digital space, providing safe and secure digital experiences for everyone.
 
 ### 👥 Team
 
@@ -64,4 +64,4 @@ This software is distributed under the **GPL-3.0** license.
 
 ### 🤝 Contributing
 
-Contributions and suggestions are welcome! If you want to fix, upgrade, or make the software better, please open an **Issue** or submit a **Pull Request** and be a part of the Future Digital Security Project.
+Contributions and suggestions are welcome! If you want to fix, upgrade, or make the software better, please open an **Issue** or submit a **Pull Request** and be a part of the future digital security project.

@@ -332,6 +332,12 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Prevent deletion of default blocklists
+		if s.cfg.Filtering.BlockLists[index].Default {
+			http.Error(w, `{"error":"Cannot delete default blocklist. You can disable it instead."}`, http.StatusForbidden)
+			return
+		}
+
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.BlockLists = append(cfg.Filtering.BlockLists[:index], cfg.Filtering.BlockLists[index+1:]...)
 		})

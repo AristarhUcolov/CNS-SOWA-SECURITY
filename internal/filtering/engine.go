@@ -231,10 +231,10 @@ func (e *Engine) LoadWhiteLists() error {
 func (e *Engine) downloadList(url, name string) ([]string, error) {
 	// Check if we have a cached version
 	cacheFile := filepath.Join(e.dataDir, "blacklist", sanitizeFilename(name)+".txt")
-	
+
 	// Try to download
 	log.Printf("[Filter] Downloading list '%s' from %s", name, url)
-	
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -476,6 +476,14 @@ func (e *Engine) RemoveCustomRule(rule string) {
 	}
 	e.cfg.Filtering.CustomRules = newRules
 	e.loadCustomRules()
+}
+
+// GetSafeSearchRewrite returns the safe search CNAME target for a domain, if any
+func (e *Engine) GetSafeSearchRewrite(domain string) (string, bool) {
+	if e.safeSearch == nil || !e.cfg.Filtering.SafeSearch.Enabled {
+		return "", false
+	}
+	return e.safeSearch.GetRewrite(domain)
 }
 
 // Refresh reloads all lists

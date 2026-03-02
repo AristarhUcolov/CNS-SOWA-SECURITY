@@ -957,7 +957,7 @@ function renderBlocklists(lists, containerId) {
     container.innerHTML = lists.map((list, index) => `
         <div class="blocklist-item">
             <div class="blocklist-info">
-                <div class="name">${escapeHtml(list.name)}</div>
+                <div class="name">${escapeHtml(list.name)}${list.default ? ' <span class="badge active" style="font-size:0.7em;margin-left:6px;">Default</span>' : ''}</div>
                 <div class="url" title="${escapeHtml(list.url)}">${escapeHtml(list.url)}</div>
             </div>
             <div class="blocklist-actions">
@@ -966,9 +966,9 @@ function renderBlocklists(lists, containerId) {
                         onchange="toggleBlocklist('${containerId}', ${index}, this.checked)">
                     <span class="slider"></span>
                 </label>
-                <button class="btn btn-sm btn-danger" onclick="removeBlocklist('${containerId}', ${index})">
+                ${list.default ? '' : `<button class="btn btn-sm btn-danger" onclick="removeBlocklist('${containerId}', ${index})">
                     <i class="fas fa-trash"></i>
-                </button>
+                </button>`}
             </div>
         </div>
     `).join('');
@@ -1185,34 +1185,65 @@ async function addClient() {
 
 async function loadClients() {
     try {
+        // Load configured clients
         const resp = await apiFetch('/api/clients');
         if (!resp.ok) return;
         const clients = await resp.json();
 
+        // Load active clients from stats
+        const statsResp = await apiFetch('/api/stats');
+        let activeClients = {};
+        if (statsResp.ok) {
+            const stats = await statsResp.json();
+            activeClients = stats.top_clients || {};
+        }
+
         const container = document.getElementById('clientsList');
         if (!container) return;
 
-        if (!clients || clients.length === 0) {
-            container.innerHTML = '<div class="empty-state"><i class="fas fa-laptop"></i><p>No clients configured</p></div>';
-            return;
+        let html = '';
+
+        // Show active (auto-detected) clients from DNS queries
+        const activeEntries = Object.entries(activeClients).sort((a, b) => b[1] - a[1]);
+        if (activeEntries.length > 0) {
+            html += '<div class="section-label" style="padding:12px 0 8px;color:#8888aa;font-size:0.85em;font-weight:600;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-wifi" style="margin-right:6px;color:#00d4aa;"></i>Active Clients (Auto-detected)</div>';
+            html += activeEntries.map(([ip, queries]) => `
+                <div class="client-item">
+                    <div class="client-info">
+                        <div class="name"><i class="fas fa-desktop" style="color:#00d4aa;margin-right:8px;"></i>${escapeHtml(ip)}</div>
+                        <div class="ids">${formatNumber(queries)} queries</div>
+                    </div>
+                    <span class="badge active" style="font-size:0.75em;">Connected</span>
+                </div>
+            `).join('');
         }
 
-        container.innerHTML = clients.map((client, i) => `
-            <div class="client-item">
-                <div class="client-info">
-                    <div class="name"><i class="fas fa-laptop"></i> ${escapeHtml(client.name)}</div>
-                    <div class="ids">${(client.ids || []).map(id => escapeHtml(id)).join(', ')}</div>
-                    <div class="client-badges">
-                        <span class="badge ${client.filtering_enabled ? 'active' : 'inactive'}">Filtering</span>
-                        <span class="badge ${client.safe_search ? 'active' : 'inactive'}">Safe Search</span>
-                        <span class="badge ${client.parental_control ? 'active' : 'inactive'}">Parental</span>
+        // Show configured (manual) clients
+        if (clients && clients.length > 0) {
+            html += '<div class="section-label" style="padding:16px 0 8px;color:#8888aa;font-size:0.85em;font-weight:600;text-transform:uppercase;letter-spacing:1px;"><i class="fas fa-cog" style="margin-right:6px;"></i>Configured Clients</div>';
+            html += clients.map((client, i) => `
+                <div class="client-item">
+                    <div class="client-info">
+                        <div class="name"><i class="fas fa-laptop"></i> ${escapeHtml(client.name)}</div>
+                        <div class="ids">${(client.ids || []).map(id => escapeHtml(id)).join(', ')}</div>
+                        <div class="client-badges">
+                            <span class="badge ${client.filtering_enabled ? 'active' : 'inactive'}">Filtering</span>
+                            <span class="badge ${client.safe_search ? 'active' : 'inactive'}">Safe Search</span>
+                            <span class="badge ${client.parental_control ? 'active' : 'inactive'}">Parental</span>
+                        </div>
                     </div>
+                    <button class="btn btn-sm btn-danger" onclick="removeClient(${i})">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </div>
-                <button class="btn btn-sm btn-danger" onclick="removeClient(${i})">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        `).join('');
+            `).join('');
+        }
+
+        if (!html) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-laptop"></i><p>No clients detected yet. Connect a device using this DNS server to see it here.</p></div>';
+        } else {
+            container.innerHTML = html;
+        }
     } catch (e) {
         if (e.message !== 'Unauthorized') console.error('Error loading clients:', e);
     }

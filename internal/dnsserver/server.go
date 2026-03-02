@@ -280,6 +280,15 @@ func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	if s.cfg.Filtering.Enabled {
 		result := s.filter.Check(domain, clientIP)
 		if result.IsBlocked {
+			// Safe Search: do CNAME rewrite instead of blocking
+			if result.Reason == "safesearch" {
+				if safeDomain, ok := s.filter.GetSafeSearchRewrite(domain); ok {
+					log.Printf("[DNS] Safe Search rewrite: %s -> %s", domain, safeDomain)
+					s.stats.RecordQuery(domain, qType, clientIP, false, "safesearch", time.Since(startTime))
+					s.writeSafeSearchResponse(w, r, safeDomain)
+					return
+				}
+			}
 			log.Printf("[DNS] Blocked: %s (reason: %s, rule: %s)", domain, result.Reason, result.Rule)
 			s.stats.RecordQuery(domain, qType, clientIP, true, result.Reason, time.Since(startTime))
 			s.writeBlockedResponse(w, r, result)
@@ -364,6 +373,51 @@ func (s *Server) writeBlockedResponse(w dns.ResponseWriter, r *dns.Msg, result f
 
 	if err := w.WriteMsg(resp); err != nil {
 		log.Printf("[DNS] Failed to write blocked response: %v", err)
+	}
+}
+
+// writeSafeSearchResponse resolves the safe domain upstream and returns CNAME + A records
+func (s *Server) writeSafeSearchResponse(w dns.ResponseWriter, r *dns.Msg, safeDomain string) {
+	question := r.Question[0]
+
+	// Build a new DNS query for the safe domain
+	safeReq := new(dns.Msg)
+	safeReq.SetQuestion(dns.Fqdn(safeDomain), question.Qtype)
+	safeReq.RecursionDesired = true
+
+	// Resolve the safe domain upstream
+	safeResp, err := s.upstream.Resolve(safeReq)
+	if err != nil {
+		log.Printf("[DNS] Safe Search upstream error for %s: %v", safeDomain, err)
+		dns.HandleFailed(w, r)
+		return
+	}
+
+	// Build response with CNAME pointing to safe domain + resolved IPs
+	resp := new(dns.Msg)
+	resp.SetReply(r)
+	resp.Authoritative = false
+
+	// Add CNAME record: original domain -> safe domain
+	resp.Answer = append(resp.Answer, &dns.CNAME{
+		Hdr: dns.RR_Header{
+			Name:   question.Name,
+			Rrtype: dns.TypeCNAME,
+			Class:  dns.ClassINET,
+			Ttl:    300,
+		},
+		Target: dns.Fqdn(safeDomain),
+	})
+
+	// Append resolved records from upstream (A/AAAA for the safe domain)
+	if safeResp != nil {
+		for _, rr := range safeResp.Answer {
+			resp.Answer = append(resp.Answer, rr)
+		}
+	}
+
+	if err := w.WriteMsg(resp); err != nil {
+		log.Printf("[DNS] Failed to write safe search response: %v", err)
 	}
 }
 

@@ -118,7 +118,8 @@ type BlockListConfig struct {
 	Name    string `json:"name"`
 	URL     string `json:"url"`
 	Enabled bool   `json:"enabled"`
-	Type    string `json:"type"` // "url" or "file"
+	Type    string `json:"type"`    // "url" or "file"
+	Default bool   `json:"default"` // Default lists cannot be deleted
 }
 
 // WhiteListConfig represents a whitelist configuration
@@ -289,6 +290,7 @@ func defaultBlockLists() []BlockListConfig {
 			URL:     fmt.Sprintf("%s/%s", baseURL, l.file),
 			Enabled: true,
 			Type:    "url",
+			Default: true,
 		}
 	}
 	return result

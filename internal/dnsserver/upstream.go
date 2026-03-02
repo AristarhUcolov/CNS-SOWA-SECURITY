@@ -1,6 +1,7 @@
 package dnsserver
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -17,15 +18,82 @@ import (
 
 // UpstreamResolver handles forwarding DNS queries to upstream servers
 type UpstreamResolver struct {
-	cfg       *config.Config
-	client    *dns.Client
-	tlsClient *dns.Client
+	cfg        *config.Config
+	client     *dns.Client
+	tlsClient  *dns.Client
 	httpClient *http.Client
-	mu        sync.RWMutex
+	mu         sync.RWMutex
+}
+
+// bootstrapDialer creates a custom dialer that resolves hostnames using
+// bootstrap DNS servers directly, bypassing the system DNS resolver.
+// This prevents circular resolution when the system DNS is set to SOWA itself.
+func bootstrapDialer(bootstrapServers []string) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	// Build a custom resolver that uses bootstrap DNS directly
+	bootstrapResolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 3 * time.Second}
+			for _, bs := range bootstrapServers {
+				if !strings.Contains(bs, ":") {
+					bs = net.JoinHostPort(bs, "53")
+				}
+				conn, err := d.DialContext(ctx, "udp", bs)
+				if err == nil {
+					return conn, nil
+				}
+			}
+			// Last resort: try default system DNS
+			return d.DialContext(ctx, network, address)
+		},
+	}
+
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		// If host is already an IP, dial directly
+		if net.ParseIP(host) != nil {
+			d := net.Dialer{Timeout: 5 * time.Second}
+			return d.DialContext(ctx, network, addr)
+		}
+
+		// Resolve hostname using bootstrap DNS
+		ips, err := bootstrapResolver.LookupHost(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap DNS resolution failed for %s: %w", host, err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("bootstrap DNS returned no addresses for %s", host)
+		}
+
+		// Try connecting to resolved IPs
+		d := net.Dialer{Timeout: 5 * time.Second}
+		var lastErr error
+		for _, ip := range ips {
+			target := net.JoinHostPort(ip, port)
+			conn, err := d.DialContext(ctx, network, target)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		return nil, fmt.Errorf("failed to connect to %s via bootstrap: %w", host, lastErr)
+	}
 }
 
 // NewUpstreamResolver creates a new upstream resolver
 func NewUpstreamResolver(cfg *config.Config) *UpstreamResolver {
+	// Get bootstrap DNS servers for resolving DoH/DoT hostnames
+	bootstrapDNS := cfg.DNS.BootstrapDNS
+	if len(bootstrapDNS) == 0 {
+		bootstrapDNS = []string{"1.1.1.1", "8.8.8.8", "9.9.9.9"}
+	}
+
+	dialFn := bootstrapDialer(bootstrapDNS)
+
 	return &UpstreamResolver{
 		cfg: cfg,
 		client: &dns.Client{
@@ -44,14 +112,17 @@ func NewUpstreamResolver(cfg *config.Config) *UpstreamResolver {
 			WriteTimeout: 5 * time.Second,
 		},
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
+				DialContext:         dialFn,
+				TLSHandshakeTimeout: 5 * time.Second,
 				TLSClientConfig: &tls.Config{
 					MinVersion: tls.VersionTLS12,
 				},
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,
 				IdleConnTimeout:     90 * time.Second,
+				ForceAttemptHTTP2:   true,
 			},
 		},
 	}
@@ -132,7 +203,35 @@ func (u *UpstreamResolver) resolveDoT(req *dns.Msg, server string) (*dns.Msg, er
 		addr = net.JoinHostPort(addr, "853")
 	}
 
-	resp, _, err := u.tlsClient.Exchange(req, addr)
+	// Extract host for TLS ServerName
+	host, _, _ := net.SplitHostPort(addr)
+
+	// For IP-based DoT servers (like 1.1.1.1), we know the TLS names
+	serverName := host
+	knownServers := map[string]string{
+		"1.1.1.1":         "cloudflare-dns.com",
+		"1.0.0.1":         "cloudflare-dns.com",
+		"8.8.8.8":         "dns.google",
+		"8.8.4.4":         "dns.google",
+		"9.9.9.9":         "dns.quad9.net",
+		"149.112.112.112": "dns.quad9.net",
+	}
+	if name, ok := knownServers[host]; ok {
+		serverName = name
+	}
+
+	tlsClient := &dns.Client{
+		Net: "tcp-tls",
+		TLSConfig: &tls.Config{
+			ServerName: serverName,
+			MinVersion: tls.VersionTLS12,
+		},
+		Timeout:      5 * time.Second,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+
+	resp, _, err := tlsClient.Exchange(req, addr)
 	if err != nil {
 		return nil, fmt.Errorf("DNS-over-TLS error: %w", err)
 	}

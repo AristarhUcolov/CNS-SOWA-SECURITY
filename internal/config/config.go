@@ -175,10 +175,10 @@ func DefaultConfig() *Config {
 			BindHost: "0.0.0.0",
 			Port:     53,
 			Upstreams: []string{
-				"https://dns.cloudflare.com/dns-query",
-				"https://dns.google/dns-query",
 				"tls://1.1.1.1",
 				"tls://8.8.8.8",
+				"https://dns.cloudflare.com/dns-query",
+				"https://dns.google/dns-query",
 			},
 			BootstrapDNS: []string{
 				"1.1.1.1",

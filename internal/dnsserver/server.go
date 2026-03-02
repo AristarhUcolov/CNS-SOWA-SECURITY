@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -242,6 +243,21 @@ func (s *Server) Stop() error {
 	return nil
 }
 
+// isUpstreamDomain checks if a domain is used by an upstream DNS server.
+// These domains must never be filtered/blocked to avoid breaking DNS resolution.
+func (s *Server) isUpstreamDomain(domain string) bool {
+	for _, upstream := range s.cfg.DNS.Upstreams {
+		if strings.HasPrefix(upstream, "https://") {
+			if u, err := url.Parse(upstream); err == nil {
+				if strings.TrimSuffix(u.Hostname(), ".") == domain {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // handleDNS is the main DNS request handler
 func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	startTime := time.Now()
@@ -276,8 +292,8 @@ func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// Log query
 	log.Printf("[DNS] Query from %s: %s %s", clientIP, domain, qType)
 
-	// Check filtering
-	if s.cfg.Filtering.Enabled {
+	// Check filtering (skip upstream DNS hostnames to prevent circular resolution)
+	if s.cfg.Filtering.Enabled && !s.isUpstreamDomain(domain) {
 		result := s.filter.Check(domain, clientIP)
 		if result.IsBlocked {
 			// Safe Search: do CNAME rewrite instead of blocking

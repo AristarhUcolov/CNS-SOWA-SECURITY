@@ -454,6 +454,22 @@ async function loadDashboard() {
 
             const uptimeEl = document.getElementById('serverUptime');
             if (uptimeEl) uptimeEl.textContent = formatUptime(status.uptime || 0);
+
+            // Update protection status indicator
+            const indicator = document.getElementById('serverStatus');
+            const dot = indicator?.querySelector('.status-dot');
+            const label = indicator?.querySelector('span:last-child');
+            if (indicator && dot && label) {
+                if (status.protection) {
+                    dot.className = 'status-dot online';
+                    label.textContent = 'Protection Active';
+                    indicator.classList.remove('disabled');
+                } else {
+                    dot.className = 'status-dot offline';
+                    label.textContent = 'Protection Disabled';
+                    indicator.classList.add('disabled');
+                }
+            }
         }
     } catch (e) {
         if (e.message !== 'Unauthorized') console.error('Error loading dashboard:', e);
@@ -601,9 +617,22 @@ function fillTopTable(tableId, dataMap) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 
-    tbody.innerHTML = sorted.length === 0
-        ? '<tr><td colspan="2" class="empty-state"><i class="fas fa-inbox"></i> No data yet</td></tr>'
-        : sorted.map(([key, val]) => `<tr><td>${escapeHtml(key)}</td><td>${formatNumber(val)}</td></tr>`).join('');
+    if (sorted.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><i class="fas fa-inbox"></i> No data yet</td></tr>';
+        return;
+    }
+
+    const isBlocked = tableId === 'topBlockedTable';
+    tbody.innerHTML = sorted.map(([key, val]) => {
+        const action = isBlocked
+            ? `<button class="btn btn-xs btn-success" onclick="quickAllowDomain('${escapeHtml(key)}')" title="Allow"><i class="fas fa-check"></i></button>`
+            : `<button class="btn btn-xs btn-danger" onclick="quickBlockDomain('${escapeHtml(key)}')" title="Block"><i class="fas fa-ban"></i></button>`;
+        return `<tr>
+            <td><span class="domain-link" onclick="testDomain('${escapeHtml(key)}')" title="Test this domain">${escapeHtml(key)}</span></td>
+            <td>${formatNumber(val)}</td>
+            <td>${action}</td>
+        </tr>`;
+    }).join('');
 }
 
 // ==================== Domain Test ====================
@@ -657,7 +686,6 @@ function applyConfigToUI(cfg) {
     // General settings
     setChecked('filteringEnabled', cfg.filtering?.enabled);
     setChecked('safeBrowsing', cfg.filtering?.safe_browsing);
-    setChecked('parentalControl', cfg.filtering?.parental_control);
 
     // Safe Search
     const ss = cfg.filtering?.safe_search || {};
@@ -719,8 +747,7 @@ function initForms() {
         await saveConfig({
             filtering: {
                 enabled: getChecked('filteringEnabled'),
-                safe_browsing: getChecked('safeBrowsing'),
-                parental_control: getChecked('parentalControl')
+                safe_browsing: getChecked('safeBrowsing')
             }
         });
     });
@@ -1092,21 +1119,27 @@ async function loadQueryLog() {
 
         const entries = data.entries || [];
         if (entries.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-clipboard-list"></i> No queries logged yet</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-clipboard-list"></i> No queries logged yet</td></tr>';
         } else {
             tbody.innerHTML = entries.map(entry => {
                 const rowClass = entry.blocked ? 'blocked-row' : 'allowed-row';
                 const status = entry.blocked
                     ? `<span style="color:var(--danger)"><i class="fas fa-ban"></i> Blocked (${escapeHtml(entry.reason)})</span>`
                     : `<span style="color:var(--success)"><i class="fas fa-check"></i> ${escapeHtml(entry.reason)}</span>`;
-                const time = new Date(entry.timestamp).toLocaleTimeString();
+                const dt = new Date(entry.timestamp);
+                const date = dt.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+                const time = dt.toLocaleTimeString();
+                const actionBtn = entry.blocked
+                    ? `<button class="btn btn-xs btn-success" onclick="quickAllowDomain('${escapeHtml(entry.domain)}')" title="Allow this domain"><i class="fas fa-check"></i></button>`
+                    : `<button class="btn btn-xs btn-danger" onclick="quickBlockDomain('${escapeHtml(entry.domain)}')" title="Block this domain"><i class="fas fa-ban"></i></button>`;
                 return `<tr class="${rowClass}">
-                    <td>${time}</td>
+                    <td><span class="ql-date">${date}</span> ${time}</td>
                     <td>${escapeHtml(entry.domain)}</td>
                     <td>${escapeHtml(entry.type)}</td>
                     <td>${escapeHtml(entry.client_ip)}</td>
                     <td>${status}</td>
                     <td>${escapeHtml(entry.duration)}</td>
+                    <td>${actionBtn}</td>
                 </tr>`;
             }).join('');
         }
@@ -1671,6 +1704,8 @@ function initKeyboardShortcuts() {
             case 'f': navigateToPage('filters'); break;
             case 'h': navigateToPage('health'); break;
             case 'g': navigateToPage('guide'); break;
+            case 'b': navigateToPage('blocklists'); break;
+            case 'c': navigateToPage('parental'); break;
             case 'p':
                 e.preventDefault();
                 toggleProtection();
@@ -1738,13 +1773,13 @@ async function revokeSession(token) {
             body: JSON.stringify({ token })
         });
         if (resp.ok) {
-            showNotification('Session revoked', 'success');
+            showToast('Session revoked', 'success');
             loadSessions();
         } else {
-            showNotification('Failed to revoke session', 'error');
+            showToast('Failed to revoke session', 'error');
         }
     } catch (e) {
-        showNotification('Failed to revoke session', 'error');
+        showToast('Failed to revoke session', 'error');
     }
 }
 
@@ -1764,12 +1799,14 @@ async function loadHealthMetrics() {
         if (!resp.ok) throw new Error('Failed to load health');
         const h = await resp.json();
 
-        const memMB = (h.memory_alloc / 1024 / 1024).toFixed(1);
-        const sysMB = (h.memory_sys / 1024 / 1024).toFixed(1);
+        const mem = h.memory || {};
+        const memMB = (mem.alloc_mb || 0).toFixed(1);
+        const sysMB = (mem.sys_mb || 0).toFixed(1);
+        const numGC = mem.num_gc || 0;
 
         grid.innerHTML = `
             <div class="health-item">
-                <div class="health-value">${formatUptime(h.uptime_seconds || 0)}</div>
+                <div class="health-value">${escapeHtml(h.uptime_human || formatUptime(h.uptime || 0))}</div>
                 <div class="health-label">Uptime</div>
             </div>
             <div class="health-item">
@@ -1785,11 +1822,15 @@ async function loadHealthMetrics() {
                 <div class="health-label">Goroutines</div>
             </div>
             <div class="health-item">
-                <div class="health-value">${h.go_version || 'N/A'}</div>
+                <div class="health-value">${numGC}</div>
+                <div class="health-label">GC Cycles</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${escapeHtml(h.go_version || 'N/A')}</div>
                 <div class="health-label">Go Version</div>
             </div>
             <div class="health-item">
-                <div class="health-value">${h.os || ''} / ${h.arch || ''}</div>
+                <div class="health-value">${escapeHtml((h.os || '') + ' / ' + (h.arch || ''))}</div>
                 <div class="health-label">Platform</div>
             </div>
             <div class="health-item">
@@ -1801,11 +1842,19 @@ async function loadHealthMetrics() {
                 <div class="health-label">DHCP Server</div>
             </div>
             <div class="health-item">
+                <div class="health-value">${h.protection ? '<span style="color:var(--accent-color)">Active</span>' : '<span style="color:var(--danger-color)">Disabled</span>'}</div>
+                <div class="health-label">Protection</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.cache_size || 0}</div>
+                <div class="health-label">Cache Entries</div>
+            </div>
+            <div class="health-item">
                 <div class="health-value">${h.auto_update_hrs || 0}h</div>
                 <div class="health-label">Auto-Update Interval</div>
             </div>
             <div class="health-item">
-                <div class="health-value">v${h.version || '?'}</div>
+                <div class="health-value">v${escapeHtml(h.version || '?')}</div>
                 <div class="health-label">Version</div>
             </div>
         `;
@@ -1912,6 +1961,48 @@ async function saveParentalControls() {
     });
 }
 
+// ==================== Quick Block/Allow from Query Log ====================
+
+async function quickBlockDomain(domain) {
+    if (!confirm(`Block "${domain}"? This will add it to custom filtering rules.`)) return;
+    try {
+        const resp = await apiFetch('/api/config');
+        if (!resp.ok) return;
+        const cfg = await resp.json();
+        const rules = cfg.filtering?.custom_rules || [];
+        const rule = `||${domain}^`;
+        // Remove any existing allow rule for this domain
+        const filtered = rules.filter(r => r !== `@@||${domain}^`);
+        if (!filtered.includes(rule)) {
+            filtered.push(rule);
+        }
+        await saveConfig({ filtering: { custom_rules: filtered } });
+        showToast(`${domain} blocked`, 'success');
+        loadQueryLog();
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error blocking domain', 'error');
+    }
+}
+
+async function quickAllowDomain(domain) {
+    if (!confirm(`Allow "${domain}"? This will add an exception to custom filtering rules.`)) return;
+    try {
+        const resp = await apiFetch('/api/config');
+        if (!resp.ok) return;
+        const cfg = await resp.json();
+        const rules = cfg.filtering?.custom_rules || [];
+        const rule = `@@||${domain}^`;
+        if (!rules.includes(rule)) {
+            rules.push(rule);
+        }
+        await saveConfig({ filtering: { custom_rules: rules } });
+        showToast(`${domain} allowed`, 'success');
+        loadQueryLog();
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error allowing domain', 'error');
+    }
+}
+
 // ==================== Config Backup / Restore ====================
 
 function initBackupRestore() {
@@ -1926,9 +2017,9 @@ function initBackupRestore() {
             a.download = `sowa-config-backup-${new Date().toISOString().slice(0, 10)}.json`;
             a.click();
             URL.revokeObjectURL(url);
-            showNotification('Configuration backup downloaded', 'success');
+            showToast('Configuration backup downloaded', 'success');
         } catch (e) {
-            showNotification('Failed to download backup', 'error');
+            showToast('Failed to download backup', 'error');
         }
     });
 
@@ -1950,13 +2041,13 @@ function initBackupRestore() {
                 body: text
             });
             if (resp.ok) {
-                showNotification('Configuration restored! Reload recommended.', 'success');
+                showToast('Configuration restored! Reload recommended.', 'success');
                 document.getElementById('backupStatus').innerHTML = '<span style="color:var(--accent-color)">Configuration restored successfully. Reload recommended.</span>';
             } else {
                 throw new Error('Restore failed');
             }
         } catch (err) {
-            showNotification('Failed to restore configuration: ' + err.message, 'error');
+            showToast('Failed to restore configuration: ' + err.message, 'error');
         }
         e.target.value = '';
     });

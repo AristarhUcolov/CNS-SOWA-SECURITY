@@ -91,7 +91,6 @@ type WebConfig struct {
 type FilteringConfig struct {
 	Enabled            bool              `json:"enabled"`
 	SafeSearch         SafeSearchConfig  `json:"safe_search"`
-	ParentalControl    bool              `json:"parental_control"`
 	Parental           ParentalConfig    `json:"parental"`
 	SafeBrowsing       bool              `json:"safe_browsing"`
 	BlockLists         []BlockListConfig `json:"blocklists"`
@@ -247,7 +246,6 @@ func DefaultConfig() *Config {
 				StartPage:  true,
 				Brave:      true,
 			},
-			ParentalControl: false,
 			Parental: ParentalConfig{
 				Enabled:          false,
 				ForceSafeSearch:  true,

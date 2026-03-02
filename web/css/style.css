@@ -1399,6 +1399,39 @@ body {
     font-size: 12px;
 }
 
+.btn-xs {
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    min-width: auto;
+}
+
+.btn-success {
+    background: var(--success);
+    color: #000;
+    border: none;
+}
+.btn-success:hover {
+    background: #00cc6e;
+    color: #000;
+}
+
+.domain-link {
+    cursor: pointer;
+    color: var(--accent-primary);
+    transition: var(--transition-fast);
+}
+.domain-link:hover {
+    text-decoration: underline;
+    color: var(--accent-secondary);
+}
+
+.ql-date {
+    color: var(--text-muted);
+    font-size: 0.85em;
+    margin-right: 4px;
+}
+
 .btn .fa-spinner {
     animation: spin 1s linear infinite;
 }

@@ -198,9 +198,6 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 				if v, ok := filterPartial["safe_browsing"]; ok {
 					json.Unmarshal(v, &cfg.Filtering.SafeBrowsing)
 				}
-				if v, ok := filterPartial["parental_control"]; ok {
-					json.Unmarshal(v, &cfg.Filtering.ParentalControl)
-				}
 				if v, ok := filterPartial["safe_search"]; ok {
 					json.Unmarshal(v, &cfg.Filtering.SafeSearch)
 				}
@@ -528,7 +525,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"dns_running":  s.dns.IsRunning(),
 		"dhcp_running": s.dhcp.IsRunning(),
 		"protection":   s.cfg.Filtering.Enabled,
-		"version":      "1.4.1",
+		"version":      "1.4.2",
 		"cache_size":   s.dns.CacheSize(),
 		"dhcp_leases":  s.dhcp.GetLeaseCount(),
 		"uptime":       int64(uptime.Seconds()),
@@ -771,7 +768,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"version":  "1.4.1",
+		"version":  "1.4.2",
 		"dns_port": s.cfg.DNS.Port,
 		"web_port": s.cfg.Web.Port,
 		"ips":      ips,
@@ -917,7 +914,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"uptime":       int64(uptime.Seconds()),
 		"uptime_human": formatDuration(uptime),
 		"start_time":   s.startTime.Format(time.RFC3339),
-		"version":      "1.4.1",
+		"version":      "1.4.2",
 		"go_version":   runtime.Version(),
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,

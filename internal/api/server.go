@@ -210,6 +210,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 				if v, ok := filterPartial["blocked_services"]; ok {
 					json.Unmarshal(v, &cfg.Filtering.BlockedServices)
 				}
+				if v, ok := filterPartial["parental"]; ok {
+					json.Unmarshal(v, &cfg.Filtering.Parental)
+				}
 			}
 			if dhcpData, ok := partial["dhcp"]; ok {
 				json.Unmarshal(dhcpData, &cfg.DHCP)
@@ -227,6 +230,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to save config", http.StatusInternalServerError)
 			return
 		}
+
+		// Refresh safe search rewrite map after config change
+		s.filter.RefreshSafeSearch()
 
 		jsonResponse(w, map[string]string{"status": "ok"})
 
@@ -261,13 +267,23 @@ func (s *Server) handleFilteringRefresh(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	go func() {
-		if err := s.filter.Refresh(); err != nil {
-			log.Printf("[API] Error refreshing filters: %v", err)
-		}
-	}()
+	log.Println("[API] Manual blocklist refresh triggered")
+	if err := s.filter.Refresh(); err != nil {
+		log.Printf("[API] Error refreshing filters: %v", err)
+		jsonResponse(w, map[string]interface{}{
+			"status": "error",
+			"error":  err.Error(),
+			"stats":  s.filter.GetStats(),
+		})
+		return
+	}
 
-	jsonResponse(w, map[string]string{"status": "refreshing"})
+	stats := s.filter.GetStats()
+	log.Printf("[API] Blocklist refresh completed: %v rules loaded", stats["total_rules"])
+	jsonResponse(w, map[string]interface{}{
+		"status": "ok",
+		"stats":  stats,
+	})
 }
 
 func (s *Server) handleBlocklistAdd(w http.ResponseWriter, r *http.Request) {
@@ -512,7 +528,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"dns_running":  s.dns.IsRunning(),
 		"dhcp_running": s.dhcp.IsRunning(),
 		"protection":   s.cfg.Filtering.Enabled,
-		"version":      "1.4.0",
+		"version":      "1.4.1",
 		"cache_size":   s.dns.CacheSize(),
 		"dhcp_leases":  s.dhcp.GetLeaseCount(),
 		"uptime":       int64(uptime.Seconds()),
@@ -755,7 +771,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"version":  "1.4.0",
+		"version":  "1.4.1",
 		"dns_port": s.cfg.DNS.Port,
 		"web_port": s.cfg.Web.Port,
 		"ips":      ips,
@@ -901,7 +917,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"uptime":       int64(uptime.Seconds()),
 		"uptime_human": formatDuration(uptime),
 		"start_time":   s.startTime.Format(time.RFC3339),
-		"version":      "1.4.0",
+		"version":      "1.4.1",
 		"go_version":   runtime.Version(),
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,

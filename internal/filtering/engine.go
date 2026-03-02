@@ -2,12 +2,15 @@ package filtering
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +38,7 @@ type Engine struct {
 	lastUpdate   time.Time
 	totalRules   int
 	updateDone   chan struct{}
+	httpClient   *http.Client
 }
 
 // BlockInfo stores info about why a domain is blocked
@@ -53,7 +57,55 @@ func New(cfg *config.Config, dataDir string) *Engine {
 		safeSearch:   NewSafeSearch(cfg),
 		dataDir:      dataDir,
 	}
+	e.httpClient = e.createHTTPClient()
 	return e
+}
+
+// createHTTPClient creates an HTTP client that uses bootstrap DNS servers
+// instead of the system resolver (which may point to SOWA itself)
+func (e *Engine) createHTTPClient() *http.Client {
+	bootstrapDNS := []string{"1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"}
+	if len(e.cfg.DNS.BootstrapDNS) > 0 {
+		bootstrapDNS = make([]string, 0, len(e.cfg.DNS.BootstrapDNS))
+		for _, s := range e.cfg.DNS.BootstrapDNS {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				continue
+			}
+			if !strings.Contains(s, ":") {
+				s = s + ":53"
+			}
+			bootstrapDNS = append(bootstrapDNS, s)
+		}
+		if len(bootstrapDNS) == 0 {
+			bootstrapDNS = []string{"1.1.1.1:53", "8.8.8.8:53"}
+		}
+	}
+
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 5 * time.Second}
+			for _, dns := range bootstrapDNS {
+				conn, err := d.DialContext(ctx, "udp", dns)
+				if err == nil {
+					return conn, nil
+				}
+			}
+			return d.DialContext(ctx, network, address)
+		},
+	}
+
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:  10 * time.Second,
+				Resolver: resolver,
+			}).DialContext,
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
+	}
 }
 
 // Start initializes the filtering engine and loads all lists
@@ -125,9 +177,28 @@ func (e *Engine) Check(domain, clientIP string) Result {
 
 	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
 
+	// Check parental control schedule first (blocks everything outside allowed hours)
+	if e.cfg.Filtering.Parental.Enabled && e.cfg.Filtering.Parental.ScheduleEnabled {
+		if !e.isWithinSchedule() {
+			return Result{
+				IsBlocked: true,
+				Reason:    "parental_schedule",
+				Rule:      "Internet access is not allowed at this time",
+				ListName:  "Parental Controls",
+			}
+		}
+	}
+
 	// Check whitelist first
 	if e.isWhitelisted(domain) {
 		return Result{IsBlocked: false}
+	}
+
+	// Check parental control categories
+	if e.cfg.Filtering.Parental.Enabled {
+		if result := e.checkParentalCategories(domain); result.IsBlocked {
+			return result
+		}
 	}
 
 	// Check custom rules
@@ -154,6 +225,20 @@ func (e *Engine) Check(domain, clientIP string) Result {
 	if e.cfg.Filtering.SafeSearch.Enabled {
 		if result := e.safeSearch.Check(domain); result.IsBlocked {
 			return result
+		}
+	}
+
+	// Check forced safe search from parental controls (overrides individual engine settings)
+	if e.cfg.Filtering.Parental.Enabled && e.cfg.Filtering.Parental.ForceSafeSearch {
+		for engine, mappings := range safeSearchRewrites {
+			if safeDomain, ok := mappings[domain]; ok && safeDomain != domain {
+				return Result{
+					IsBlocked: true,
+					Reason:    "safesearch",
+					Rule:      domain + " -> " + safeDomain,
+					ListName:  "Parental: Safe Search (" + engine + ")",
+				}
+			}
 		}
 	}
 
@@ -196,43 +281,64 @@ func (e *Engine) Check(domain, clientIP string) Result {
 
 // LoadBlockLists downloads and loads all enabled blocklists
 func (e *Engine) LoadBlockLists() error {
+	// Download all lists concurrently (max 5 at a time)
+	type listResult struct {
+		name    string
+		domains []string
+		err     error
+	}
+
+	var enabledLists []config.BlockListConfig
+	for _, bl := range e.cfg.Filtering.BlockLists {
+		if bl.Enabled {
+			enabledLists = append(enabledLists, bl)
+		}
+	}
+
+	results := make([]listResult, len(enabledLists))
+	sem := make(chan struct{}, 5) // max 5 concurrent downloads
+	var wg sync.WaitGroup
+
+	for i, bl := range enabledLists {
+		wg.Add(1)
+		go func(idx int, bl config.BlockListConfig) {
+			defer wg.Done()
+			sem <- struct{}{}        // acquire
+			defer func() { <-sem }() // release
+
+			var domains []string
+			var err error
+			switch bl.Type {
+			case "file":
+				domains, err = e.loadListFromFile(bl.URL)
+			default:
+				domains, err = e.downloadList(bl.URL, bl.Name)
+			}
+			results[idx] = listResult{name: bl.Name, domains: domains, err: err}
+		}(i, bl)
+	}
+	wg.Wait()
+
+	// Merge results under lock
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	e.blockedMap = make(map[string]*BlockInfo)
 	e.totalRules = 0
 
-	for _, bl := range e.cfg.Filtering.BlockLists {
-		if !bl.Enabled {
+	for _, res := range results {
+		if res.err != nil {
+			log.Printf("[Filter] Error loading blocklist '%s': %v", res.name, res.err)
 			continue
 		}
-
-		var domains []string
-		var err error
-
-		switch bl.Type {
-		case "url":
-			domains, err = e.downloadList(bl.URL, bl.Name)
-		case "file":
-			domains, err = e.loadListFromFile(bl.URL)
-		default:
-			domains, err = e.downloadList(bl.URL, bl.Name)
-		}
-
-		if err != nil {
-			log.Printf("[Filter] Error loading blocklist '%s': %v", bl.Name, err)
-			continue
-		}
-
-		for _, domain := range domains {
+		for _, domain := range res.domains {
 			e.blockedMap[domain] = &BlockInfo{
-				ListName: bl.Name,
+				ListName: res.name,
 				Rule:     domain,
 			}
 		}
-
-		e.totalRules += len(domains)
-		log.Printf("[Filter] Loaded blocklist '%s': %d domains", bl.Name, len(domains))
+		e.totalRules += len(res.domains)
+		log.Printf("[Filter] Loaded blocklist '%s': %d domains", res.name, len(res.domains))
 	}
 
 	e.lastUpdate = time.Now()
@@ -279,23 +385,40 @@ func (e *Engine) LoadWhiteLists() error {
 }
 
 // downloadList downloads a blocklist from a URL and saves it locally
-func (e *Engine) downloadList(url, name string) ([]string, error) {
+func (e *Engine) downloadList(rawURL, name string) ([]string, error) {
 	// Check if we have a cached version
 	cacheFile := filepath.Join(e.dataDir, "blacklist", sanitizeFilename(name)+".txt")
 
-	// Try to download
-	log.Printf("[Filter] Downloading list '%s' from %s", name, url)
+	// Try to download with retry
+	log.Printf("[Filter] Downloading list '%s' from %s", name, rawURL)
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	var resp *http.Response
+	var err error
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		resp, err = e.httpClient.Get(rawURL)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if attempt < maxRetries {
+			wait := time.Duration(attempt) * 2 * time.Second
+			log.Printf("[Filter] Download attempt %d/%d failed for '%s', retrying in %v...", attempt, maxRetries, name, wait)
+			time.Sleep(wait)
+		}
+	}
+
 	if err != nil {
-		// Try to use cached version
-		log.Printf("[Filter] Download failed, trying cached version: %v", err)
+		// All retries failed, try to use cached version
+		log.Printf("[Filter] Download failed after %d attempts, trying cached version: %v", maxRetries, err)
 		return e.loadListFromFile(cacheFile)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Filter] Download returned status %d for '%s', trying cache", resp.StatusCode, name)
 		return e.loadListFromFile(cacheFile)
 	}
 
@@ -633,8 +756,25 @@ func (e *Engine) RemoveCustomRule(rule string) {
 	e.loadCustomRules()
 }
 
+// RefreshSafeSearch rebuilds the safe search rewrite map after config changes
+func (e *Engine) RefreshSafeSearch() {
+	if e.safeSearch != nil {
+		e.safeSearch.Refresh()
+	}
+}
+
 // GetSafeSearchRewrite returns the safe search CNAME target for a domain, if any
 func (e *Engine) GetSafeSearchRewrite(domain string) (string, bool) {
+	// If parental control forces safe search, check all engines
+	if e.cfg.Filtering.Parental.Enabled && e.cfg.Filtering.Parental.ForceSafeSearch {
+		domain = strings.ToLower(strings.TrimSuffix(domain, "."))
+		for _, mappings := range safeSearchRewrites {
+			if safeDomain, ok := mappings[domain]; ok && safeDomain != domain {
+				return safeDomain, true
+			}
+		}
+	}
+
 	if e.safeSearch == nil || !e.cfg.Filtering.SafeSearch.Enabled {
 		return "", false
 	}
@@ -651,4 +791,181 @@ func (e *Engine) Refresh() error {
 	}
 	e.loadCustomRules()
 	return nil
+}
+
+// ==================== Parental Controls ====================
+
+// isWithinSchedule checks if the current time is within the allowed internet hours
+func (e *Engine) isWithinSchedule() bool {
+	p := e.cfg.Filtering.Parental
+	if !p.ScheduleEnabled {
+		return true
+	}
+
+	now := time.Now()
+	weekday := now.Weekday()
+	isWeekend := weekday == time.Saturday || weekday == time.Sunday
+
+	var fromStr, toStr string
+	if isWeekend && p.WeekendFrom != "" && p.WeekendTo != "" {
+		fromStr = p.WeekendFrom
+		toStr = p.WeekendTo
+	} else {
+		fromStr = p.ScheduleFrom
+		toStr = p.ScheduleTo
+	}
+
+	if fromStr == "" || toStr == "" {
+		return true
+	}
+
+	currentMinutes := now.Hour()*60 + now.Minute()
+	fromMinutes := parseTimeMinutes(fromStr)
+	toMinutes := parseTimeMinutes(toStr)
+
+	if fromMinutes < 0 || toMinutes < 0 {
+		return true
+	}
+
+	// Handle overnight schedules (e.g., from 22:00 to 07:00)
+	if fromMinutes > toMinutes {
+		return currentMinutes >= fromMinutes || currentMinutes <= toMinutes
+	}
+
+	return currentMinutes >= fromMinutes && currentMinutes <= toMinutes
+}
+
+// parseTimeMinutes parses "HH:MM" format to total minutes since midnight
+func parseTimeMinutes(s string) int {
+	parts := strings.Split(s, ":")
+	if len(parts) != 2 {
+		return -1
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return -1
+	}
+	return h*60 + m
+}
+
+// checkParentalCategories checks if a domain falls into a blocked parental category
+func (e *Engine) checkParentalCategories(domain string) Result {
+	p := e.cfg.Filtering.Parental
+
+	// Check service-based categories (social media, gaming)
+	type categoryCheck struct {
+		enabled  bool
+		services []string
+		name     string
+	}
+
+	serviceChecks := []categoryCheck{
+		{p.BlockSocialMedia, []string{"facebook", "instagram", "twitter", "tiktok", "snapchat",
+			"telegram", "whatsapp", "discord", "vk", "tumblr", "reddit", "pinterest", "linkedin"}, "Social Media"},
+		{p.BlockGaming, []string{"steam", "epicgames", "roblox", "twitch"}, "Gaming"},
+	}
+
+	for _, check := range serviceChecks {
+		if !check.enabled {
+			continue
+		}
+		for _, service := range check.services {
+			domains, ok := blockedServiceDomains[service]
+			if !ok {
+				continue
+			}
+			for _, d := range domains {
+				if domain == d || strings.HasSuffix(domain, "."+d) {
+					return Result{
+						IsBlocked: true,
+						Reason:    "parental_category",
+						Rule:      domain,
+						ListName:  "Parental: " + check.name,
+					}
+				}
+			}
+		}
+	}
+
+	// Check domain-based categories (adult, gambling, dating, drugs, video)
+	type domainCategory struct {
+		enabled bool
+		domains []string
+		name    string
+	}
+
+	domainChecks := []domainCategory{
+		{p.BlockAdult, parentalAdultDomains, "Adult Content"},
+		{p.BlockGambling, parentalGamblingDomains, "Gambling"},
+		{p.BlockDating, parentalDatingDomains, "Dating"},
+		{p.BlockDrugs, parentalDrugsDomains, "Drugs & Alcohol"},
+		{p.BlockVideo, parentalVideoDomains, "Video Platforms"},
+	}
+
+	for _, check := range domainChecks {
+		if !check.enabled {
+			continue
+		}
+		for _, d := range check.domains {
+			if domain == d || strings.HasSuffix(domain, "."+d) {
+				return Result{
+					IsBlocked: true,
+					Reason:    "parental_category",
+					Rule:      domain,
+					ListName:  "Parental: " + check.name,
+				}
+			}
+		}
+	}
+
+	return Result{IsBlocked: false}
+}
+
+// Parental control domain lists
+var parentalAdultDomains = []string{
+	"pornhub.com", "xvideos.com", "xhamster.com", "xnxx.com",
+	"redtube.com", "youporn.com", "tube8.com", "spankbang.com",
+	"chaturbate.com", "livejasmin.com", "stripchat.com",
+	"onlyfans.com", "fansly.com", "manyvids.com", "bongacams.com",
+	"cam4.com", "camsoda.com", "myfreecams.com", "flirt4free.com",
+	"brazzers.com", "realitykings.com", "bangbros.com",
+	"pornhubpremium.com", "ixxx.com", "hqporner.com",
+	"eporner.com", "tnaflix.com", "drtuber.com", "txxx.com",
+	"thumbzilla.com", "beeg.com", "porn.com", "4tube.com",
+	"sunporno.com", "sexvid.xxx", "fuq.com", "porntube.com",
+}
+
+var parentalGamblingDomains = []string{
+	"bet365.com", "888sport.com", "888casino.com", "888poker.com",
+	"pokerstars.com", "betfair.com", "williamhill.com", "unibet.com",
+	"bwin.com", "ladbrokes.com", "paddypower.com", "betway.com",
+	"draftkings.com", "fanduel.com", "1xbet.com", "parimatch.com",
+	"stake.com", "betano.com", "vulkanbet.com", "mostbet.com",
+	"1win.com", "pinup.com", "fonbet.com", "marathon.com",
+	"leon.com", "melbet.com", "betwinner.com", "22bet.com",
+	"casinox.com", "joycasino.com", "vulkanvegas.com",
+	"casino.com", "jackpotcity.com", "spinpalace.com",
+}
+
+var parentalDatingDomains = []string{
+	"tinder.com", "badoo.com", "match.com", "okcupid.com",
+	"bumble.com", "hinge.co", "pof.com", "zoosk.com",
+	"happn.com", "meetic.com", "lovoo.com", "mamba.ru",
+	"loveplanet.ru", "dating.com", "eharmony.com",
+	"elitesingles.com", "silversingles.com", "ourtime.com",
+	"grindr.com", "her.app", "taimi.com", "feeld.co",
+}
+
+var parentalDrugsDomains = []string{
+	"leafly.com", "weedmaps.com", "erowid.org",
+	"hightimes.com", "420science.com", "rollitup.org",
+	"grasscity.com", "dhgate.com", "alibaba.com",
+}
+
+var parentalVideoDomains = []string{
+	"youtube.com", "youtu.be", "ytimg.com", "googlevideo.com",
+	"youtube-nocookie.com", "tiktok.com", "tiktokcdn.com",
+	"dailymotion.com", "vimeo.com", "rutube.ru", "dzen.ru",
+	"bilibili.com", "nicovideo.jp", "vidio.com",
 }

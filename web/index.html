@@ -201,7 +201,7 @@
                     <i class="fas fa-shield-halved"></i>
                     <span class="logo-text">S.O.W.A</span>
                 </div>
-                <span class="version">v1.4.0</span>
+                <span class="version">v1.4.1</span>
             </div>
             
             <ul class="nav-menu">
@@ -219,6 +219,9 @@
                 </li>
                 <li class="nav-item" data-page="safesearch">
                     <a href="#safesearch"><i class="fas fa-search"></i><span>Safe Search</span></a>
+                </li>
+                <li class="nav-item" data-page="parental">
+                    <a href="#parental"><i class="fas fa-child"></i><span>Parental Controls</span></a>
                 </li>
                 <li class="nav-item" data-page="blocked-services">
                     <a href="#blocked-services"><i class="fas fa-ban"></i><span>Blocked Services</span></a>
@@ -794,6 +797,162 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Parental Controls Page -->
+            <div class="page" id="page-parental">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-child"></i> Parental Controls</h3>
+                        <p class="card-subtitle">Protect children from inappropriate content and manage internet usage</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Enable Parental Controls</label>
+                            <label class="switch">
+                                <input type="checkbox" id="parentalEnabled">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Force Safe Search on All Engines</label>
+                            <label class="switch">
+                                <input type="checkbox" id="parentalForceSafeSearch">
+                                <span class="slider"></span>
+                            </label>
+                            <small class="form-hint">When enabled, forces safe search on Google, Bing, Yandex, YouTube and all other supported engines regardless of individual Safe Search settings</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-shield-alt"></i> Content Categories</h3>
+                        <p class="card-subtitle">Block access to specific content categories</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="parental-categories-grid">
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-ban" style="color:var(--danger-color)"></i>
+                                    <div>
+                                        <strong>Adult Content</strong>
+                                        <small>Pornography, explicit material</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockAdult"><span class="slider"></span></label>
+                            </div>
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-dice" style="color:#ffaa00"></i>
+                                    <div>
+                                        <strong>Gambling</strong>
+                                        <small>Online casinos, betting sites</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockGambling"><span class="slider"></span></label>
+                            </div>
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-heart" style="color:#ff6b9d"></i>
+                                    <div>
+                                        <strong>Dating</strong>
+                                        <small>Dating apps and websites</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockDating"><span class="slider"></span></label>
+                            </div>
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-cannabis" style="color:#88cc44"></i>
+                                    <div>
+                                        <strong>Drugs & Alcohol</strong>
+                                        <small>Drug and alcohol related content</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockDrugs"><span class="slider"></span></label>
+                            </div>
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-users" style="color:#00aaff"></i>
+                                    <div>
+                                        <strong>Social Media</strong>
+                                        <small>Facebook, Instagram, TikTok, etc.</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockSocialMedia"><span class="slider"></span></label>
+                            </div>
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-gamepad" style="color:#b366ff"></i>
+                                    <div>
+                                        <strong>Gaming</strong>
+                                        <small>Steam, Epic Games, Roblox, Twitch</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockGaming"><span class="slider"></span></label>
+                            </div>
+                            <div class="parental-category-item">
+                                <div class="category-info">
+                                    <i class="fas fa-video" style="color:#ff4444"></i>
+                                    <div>
+                                        <strong>Video Platforms</strong>
+                                        <small>YouTube, TikTok, Dailymotion, etc.</small>
+                                    </div>
+                                </div>
+                                <label class="switch"><input type="checkbox" id="parentalBlockVideo"><span class="slider"></span></label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-clock"></i> Internet Schedule</h3>
+                        <p class="card-subtitle">Set allowed internet hours — all DNS requests outside these hours will be blocked</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Enable Schedule</label>
+                            <label class="switch">
+                                <input type="checkbox" id="parentalScheduleEnabled">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="schedule-grid" id="scheduleSettings">
+                            <div class="schedule-row">
+                                <h4><i class="fas fa-briefcase"></i> Weekdays (Mon—Fri)</h4>
+                                <div class="schedule-times">
+                                    <div class="form-group">
+                                        <label>Allow from</label>
+                                        <input type="time" id="parentalScheduleFrom" value="07:00" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Allow until</label>
+                                        <input type="time" id="parentalScheduleTo" value="21:00" class="form-control">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="schedule-row">
+                                <h4><i class="fas fa-couch"></i> Weekends (Sat—Sun)</h4>
+                                <div class="schedule-times">
+                                    <div class="form-group">
+                                        <label>Allow from</label>
+                                        <input type="time" id="parentalWeekendFrom" value="08:00" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Allow until</label>
+                                        <input type="time" id="parentalWeekendTo" value="23:00" class="form-control">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="saveParentalControls" style="margin-top:16px;">
+                    <i class="fas fa-save"></i> Save Parental Controls
+                </button>
             </div>
 
             <!-- Blocked Services Page -->

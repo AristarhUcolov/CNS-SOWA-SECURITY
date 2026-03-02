@@ -92,6 +92,7 @@ type FilteringConfig struct {
 	Enabled            bool              `json:"enabled"`
 	SafeSearch         SafeSearchConfig  `json:"safe_search"`
 	ParentalControl    bool              `json:"parental_control"`
+	Parental           ParentalConfig    `json:"parental"`
 	SafeBrowsing       bool              `json:"safe_browsing"`
 	BlockLists         []BlockListConfig `json:"blocklists"`
 	WhiteLists         []WhiteListConfig `json:"whitelists"`
@@ -99,6 +100,24 @@ type FilteringConfig struct {
 	BlockedServices    []string          `json:"blocked_services"`
 	DNSRewrites        []DNSRewrite      `json:"dns_rewrites"`
 	AutoUpdateInterval int               `json:"auto_update_interval"` // hours, 0 = disabled
+}
+
+// ParentalConfig holds parental control settings
+type ParentalConfig struct {
+	Enabled          bool   `json:"enabled"`
+	ForceSafeSearch  bool   `json:"force_safe_search"`
+	BlockAdult       bool   `json:"block_adult"`
+	BlockGambling    bool   `json:"block_gambling"`
+	BlockSocialMedia bool   `json:"block_social_media"`
+	BlockGaming      bool   `json:"block_gaming"`
+	BlockDating      bool   `json:"block_dating"`
+	BlockDrugs       bool   `json:"block_drugs"`
+	BlockVideo       bool   `json:"block_video"`
+	ScheduleEnabled  bool   `json:"schedule_enabled"`
+	ScheduleFrom     string `json:"schedule_from"` // "07:00"
+	ScheduleTo       string `json:"schedule_to"`   // "21:00"
+	WeekendFrom      string `json:"weekend_from"`  // "08:00"
+	WeekendTo        string `json:"weekend_to"`    // "23:00"
 }
 
 // DNSRewrite maps a domain to a custom IP address
@@ -228,7 +247,23 @@ func DefaultConfig() *Config {
 				StartPage:  true,
 				Brave:      true,
 			},
-			ParentalControl:    false,
+			ParentalControl: false,
+			Parental: ParentalConfig{
+				Enabled:          false,
+				ForceSafeSearch:  true,
+				BlockAdult:       true,
+				BlockGambling:    true,
+				BlockSocialMedia: false,
+				BlockGaming:      false,
+				BlockDating:      true,
+				BlockDrugs:       true,
+				BlockVideo:       false,
+				ScheduleEnabled:  false,
+				ScheduleFrom:     "07:00",
+				ScheduleTo:       "21:00",
+				WeekendFrom:      "08:00",
+				WeekendTo:        "23:00",
+			},
 			SafeBrowsing:       true,
 			BlockLists:         defaultBlockLists(),
 			WhiteLists:         []WhiteListConfig{},

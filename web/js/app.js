@@ -375,6 +375,7 @@ function loadPageData(page) {
         case 'dns-rewrites': loadDNSRewrites(); break;
         case 'sessions': loadSessions(); break;
         case 'health': loadSystemHealth(); break;
+        case 'parental': loadParentalControls(); break;
     }
 }
 
@@ -1042,11 +1043,17 @@ async function refreshAllLists() {
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
     }
-    showToast('Updating all lists...', 'info');
+    showToast('Downloading and updating all lists... This may take a moment.', 'info');
     try {
         const resp = await apiFetch('/api/filtering/refresh', { method: 'POST' });
         if (resp.ok) {
-            showToast('All lists updated successfully', 'success');
+            const data = await resp.json();
+            const rules = data.stats?.total_rules || 0;
+            if (data.status === 'ok') {
+                showToast(`All lists updated successfully! ${rules} rules loaded.`, 'success');
+            } else {
+                showToast(`Lists updated with errors. ${rules} rules loaded.`, 'warning');
+            }
             loadBlocklists();
         } else showToast('Failed to update lists', 'error');
     } catch (e) {
@@ -1683,26 +1690,6 @@ function navigateToPage(page) {
     if (navItem) navItem.click();
 }
 
-async function toggleProtection() {
-    try {
-        const resp = await apiFetch('/api/config');
-        if (!resp.ok) return;
-        const cfg = await resp.json();
-        cfg.filtering.enabled = !cfg.filtering.enabled;
-        const saveResp = await apiFetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cfg)
-        });
-        if (saveResp.ok) {
-            showNotification(cfg.filtering.enabled ? 'Protection enabled' : 'Protection disabled', 'success');
-            loadDashboard();
-        }
-    } catch (e) {
-        showNotification('Failed to toggle protection', 'error');
-    }
-}
-
 // ==================== Sessions Management ====================
 
 async function loadSessions() {
@@ -1860,6 +1847,69 @@ async function loadUpstreamStats() {
     } catch (e) {
         container.innerHTML = '<div class="error-message">Failed to load upstream stats</div>';
     }
+}
+
+// ==================== Parental Controls ====================
+
+async function loadParentalControls() {
+    try {
+        const resp = await apiFetch('/api/config');
+        if (!resp.ok) return;
+        const cfg = await resp.json();
+        const p = cfg.filtering?.parental || {};
+
+        setChecked('parentalEnabled', p.enabled);
+        setChecked('parentalForceSafeSearch', p.force_safe_search);
+        setChecked('parentalBlockAdult', p.block_adult);
+        setChecked('parentalBlockGambling', p.block_gambling);
+        setChecked('parentalBlockDating', p.block_dating);
+        setChecked('parentalBlockDrugs', p.block_drugs);
+        setChecked('parentalBlockSocialMedia', p.block_social_media);
+        setChecked('parentalBlockGaming', p.block_gaming);
+        setChecked('parentalBlockVideo', p.block_video);
+        setChecked('parentalScheduleEnabled', p.schedule_enabled);
+
+        const fromEl = document.getElementById('parentalScheduleFrom');
+        const toEl = document.getElementById('parentalScheduleTo');
+        const weFromEl = document.getElementById('parentalWeekendFrom');
+        const weToEl = document.getElementById('parentalWeekendTo');
+        if (fromEl) fromEl.value = p.schedule_from || '07:00';
+        if (toEl) toEl.value = p.schedule_to || '21:00';
+        if (weFromEl) weFromEl.value = p.weekend_from || '08:00';
+        if (weToEl) weToEl.value = p.weekend_to || '23:00';
+    } catch (e) {
+        if (e.message !== 'Unauthorized') console.error('Error loading parental controls:', e);
+    }
+
+    // Attach save handler once
+    const saveBtn = document.getElementById('saveParentalControls');
+    if (saveBtn && !saveBtn._bound) {
+        saveBtn._bound = true;
+        saveBtn.addEventListener('click', saveParentalControls);
+    }
+}
+
+async function saveParentalControls() {
+    await saveConfig({
+        filtering: {
+            parental: {
+                enabled: getChecked('parentalEnabled'),
+                force_safe_search: getChecked('parentalForceSafeSearch'),
+                block_adult: getChecked('parentalBlockAdult'),
+                block_gambling: getChecked('parentalBlockGambling'),
+                block_dating: getChecked('parentalBlockDating'),
+                block_drugs: getChecked('parentalBlockDrugs'),
+                block_social_media: getChecked('parentalBlockSocialMedia'),
+                block_gaming: getChecked('parentalBlockGaming'),
+                block_video: getChecked('parentalBlockVideo'),
+                schedule_enabled: getChecked('parentalScheduleEnabled'),
+                schedule_from: document.getElementById('parentalScheduleFrom')?.value || '07:00',
+                schedule_to: document.getElementById('parentalScheduleTo')?.value || '21:00',
+                weekend_from: document.getElementById('parentalWeekendFrom')?.value || '08:00',
+                weekend_to: document.getElementById('parentalWeekendTo')?.value || '23:00'
+            }
+        }
+    });
 }
 
 // ==================== Config Backup / Restore ====================

@@ -283,7 +283,7 @@ func (u *UpstreamResolver) resolveDoH(req *dns.Msg, server string) (*dns.Msg, er
 }
 
 // resolveDNSCrypt forwards via DNSCrypt protocol
-func (u *UpstreamResolver) resolveDNSCrypt(req *dns.Msg, server string) (*dns.Msg, error) {
+func (u *UpstreamResolver) resolveDNSCrypt(req *dns.Msg, _ string) (*dns.Msg, error) {
 	// DNSCrypt implementation placeholder
 	// For now, fall back to the first plain upstream
 	log.Printf("[Upstream] DNSCrypt not fully implemented yet, using fallback")

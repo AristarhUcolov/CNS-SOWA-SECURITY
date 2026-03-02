@@ -415,7 +415,8 @@ func (s *Server) handleQueryLog(w http.ResponseWriter, r *http.Request) {
 	entries := stats.GetQueryLog(limit)
 
 	// Apply filter
-	if filterType == "blocked" {
+	switch filterType {
+	case "blocked":
 		var filtered []stats.QueryLogEntry
 		for _, e := range entries {
 			if e.Blocked {
@@ -423,7 +424,7 @@ func (s *Server) handleQueryLog(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		entries = filtered
-	} else if filterType == "allowed" {
+	case "allowed":
 		var filtered []stats.QueryLogEntry
 		for _, e := range entries {
 			if !e.Blocked {

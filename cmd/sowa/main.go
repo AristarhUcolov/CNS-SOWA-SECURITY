@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/api"
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/auth"
@@ -147,9 +149,18 @@ func main() {
 	// DNS server
 	dnsServer := dnsserver.New(cfg, filterEngine, statsCollector)
 	if err := dnsServer.Start(); err != nil {
-		log.Printf("[Main] Warning: DNS server failed to start: %v", err)
-		log.Println("[Main] The DNS server might need administrator privileges for port 53")
-		log.Println("[Main] Try running with --dns-port 5353 for non-privileged port")
+		log.Printf("[Main] ⚠ DNS server failed to start: %v", err)
+		if cfg.DNS.Port < 1024 {
+			log.Println("[Main] ⚠ Port", cfg.DNS.Port, "requires administrator/root privileges!")
+			log.Println("[Main] ⚠ On Windows: Right-click sowa-security.exe → Run as administrator")
+			log.Println("[Main] ⚠ Or use --dns-port 5353 for a non-privileged port")
+		}
+	} else {
+		// Self-test: verify DNS actually resolves
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			testDNS(cfg.DNS.Port)
+		}()
 	}
 
 	// DHCP server
@@ -250,4 +261,26 @@ func getLocalIPs() []string {
 		}
 	}
 	return ips
+}
+
+// testDNS performs a quick self-test to verify DNS resolution works
+func testDNS(port int) {
+	r := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 3 * time.Second}
+			return d.DialContext(ctx, "udp", fmt.Sprintf("127.0.0.1:%d", port))
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	ips, err := r.LookupHost(ctx, "www.google.com")
+	if err != nil {
+		log.Printf("[Main] ⚠ DNS self-test FAILED: %v", err)
+		log.Println("[Main] ⚠ DNS resolution may not work. Check upstream servers and firewall.")
+	} else {
+		log.Printf("[Main] ✓ DNS self-test passed: www.google.com → %s", strings.Join(ips, ", "))
+	}
 }

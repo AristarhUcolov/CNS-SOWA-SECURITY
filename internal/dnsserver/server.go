@@ -353,7 +353,7 @@ func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 // writeBlockedResponse sends a blocked response (NXDOMAIN or 0.0.0.0)
-func (s *Server) writeBlockedResponse(w dns.ResponseWriter, r *dns.Msg, result filtering.Result) {
+func (s *Server) writeBlockedResponse(w dns.ResponseWriter, r *dns.Msg, _ filtering.Result) {
 	resp := new(dns.Msg)
 	resp.SetReply(r)
 	resp.Authoritative = true

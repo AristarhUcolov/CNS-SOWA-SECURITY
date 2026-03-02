@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/api"
@@ -170,6 +172,9 @@ func main() {
 		log.Fatalf("[Main] Failed to start web server: %v", err)
 	}
 
+	// Detect local network IPs
+	localIPs := getLocalIPs()
+
 	log.Println("[Main] ════════════════════════════════════════════")
 	log.Printf("[Main]  S.O.W.A Security is running!")
 	log.Printf("[Main]  DNS Server:    %s:%d", cfg.DNS.BindHost, cfg.DNS.Port)
@@ -181,6 +186,19 @@ func main() {
 	}
 	log.Printf("[Main]  Web Interface: http://%s:%d", cfg.Web.BindHost, cfg.Web.Port)
 	log.Printf("[Main]  Data Dir:      %s", dataDir)
+	log.Println("[Main] ────────────────────────────────────────────")
+	log.Printf("[Main]  Access your dashboard from:")
+	log.Printf("[Main]    → http://127.0.0.1:%d (localhost)", cfg.Web.Port)
+	for _, ip := range localIPs {
+		log.Printf("[Main]    → http://%s:%d (network)", ip, cfg.Web.Port)
+	}
+	if len(localIPs) > 0 {
+		log.Println("[Main] ────────────────────────────────────────────")
+		log.Printf("[Main]  To use DNS filtering on this device:")
+		log.Printf("[Main]    Set DNS to 127.0.0.1 or %s", localIPs[0])
+		log.Printf("[Main]  To protect your whole network:")
+		log.Printf("[Main]    Set DNS in your router to %s", localIPs[0])
+	}
 	log.Println("[Main] ════════════════════════════════════════════")
 
 	// Wait for shutdown signal
@@ -198,4 +216,38 @@ func main() {
 	cfg.Save()
 
 	log.Println("[Main] S.O.W.A Security stopped. Stay safe!")
+}
+
+// getLocalIPs returns all non-loopback IPv4 addresses of the machine
+func getLocalIPs() []string {
+	var ips []string
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ips
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			if ip.To4() != nil && !strings.HasPrefix(ip.String(), "169.254") {
+				ips = append(ips, ip.String())
+			}
+		}
+	}
+	return ips
 }

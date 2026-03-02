@@ -56,6 +56,7 @@ func (s *Server) Start() error {
 		"/api/auth/login",
 		"/api/auth/setup",
 		"/api/auth/status",
+		"/api/system/info",
 	}))
 
 	s.httpSrv = &http.Server{
@@ -119,6 +120,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/cache/clear", s.handleCacheClear)
 	s.mux.HandleFunc("/api/status", s.handleStatus)
 	s.mux.HandleFunc("/api/test", s.handleTestDomain)
+	s.mux.HandleFunc("/api/system/info", s.handleSystemInfo)
 
 	// Static files (web UI)
 	s.mux.Handle("/", http.FileServer(http.Dir(s.webDir)))
@@ -694,6 +696,50 @@ func (s *Server) handleTestDomain(w http.ResponseWriter, r *http.Request) {
 
 	result := s.filter.Check(domain, "")
 	jsonResponse(w, result)
+}
+
+func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Detect local IPs
+	var ips []string
+	ifaces, err := net.Interfaces()
+	if err == nil {
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				var ip net.IP
+				switch v := addr.(type) {
+				case *net.IPNet:
+					ip = v.IP
+				case *net.IPAddr:
+					ip = v.IP
+				}
+				if ip == nil || ip.IsLoopback() {
+					continue
+				}
+				if ip.To4() != nil && !strings.HasPrefix(ip.String(), "169.254") {
+					ips = append(ips, ip.String())
+				}
+			}
+		}
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"version":  "1.0.0",
+		"dns_port": s.cfg.DNS.Port,
+		"web_port": s.cfg.Web.Port,
+		"ips":      ips,
+	})
 }
 
 // ==================== Helpers ====================

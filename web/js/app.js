@@ -12,6 +12,9 @@ let authToken = localStorage.getItem('sowa_token') || '';
 
 // ==================== Auth ====================
 
+// Server info cache
+let serverInfo = null;
+
 async function checkAuth() {
     try {
         const resp = await apiFetch('/api/auth/status');
@@ -19,7 +22,7 @@ async function checkAuth() {
         const data = await resp.json();
 
         if (!data.configured) {
-            // First time setup - show setup form
+            // First time setup - show wizard
             showLoginScreen('setup');
             return;
         }
@@ -44,10 +47,12 @@ function showLoginScreen(mode) {
     document.getElementById('appContainer').style.display = 'none';
 
     if (mode === 'setup') {
-        document.getElementById('setupForm').style.display = 'block';
+        document.getElementById('setupWizard').style.display = 'block';
         document.getElementById('loginForm').style.display = 'none';
+        wizardNext(1);
+        loadServerInfo();
     } else {
-        document.getElementById('setupForm').style.display = 'none';
+        document.getElementById('setupWizard').style.display = 'none';
         document.getElementById('loginForm').style.display = 'block';
     }
 }
@@ -58,19 +63,104 @@ function showApp() {
     initApp();
 }
 
+// ==================== Setup Wizard ====================
+
+let currentWizardStep = 1;
+
+function wizardNext(step) {
+    currentWizardStep = step;
+
+    // Update progress indicators
+    document.querySelectorAll('.wizard-step').forEach(el => {
+        const s = parseInt(el.dataset.step);
+        el.classList.remove('active', 'done');
+        if (s < step) el.classList.add('done');
+        if (s === step) el.classList.add('active');
+    });
+
+    // Show active panel
+    document.querySelectorAll('.wizard-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(`wizardStep${step}`);
+    if (panel) panel.classList.add('active');
+}
+
+async function loadServerInfo() {
+    try {
+        const resp = await fetch(`${API_BASE}/api/system/info`);
+        if (resp.ok) {
+            serverInfo = await resp.json();
+            const ip = serverInfo.ips?.[0] || '127.0.0.1';
+            const dnsPort = serverInfo.dns_port || 53;
+            const webPort = serverInfo.web_port || 8080;
+            const webURL = `http://${ip}:${webPort}`;
+
+            // Wizard info
+            const wizardIP = document.getElementById('wizardServerIP');
+            const wizardPort = document.getElementById('wizardDNSPort');
+            const wizardWeb = document.getElementById('wizardWebURL');
+            if (wizardIP) wizardIP.textContent = ip;
+            if (wizardPort) wizardPort.textContent = dnsPort;
+            if (wizardWeb) wizardWeb.textContent = webURL;
+
+            // Guide DNS codes in wizard
+            ['guideDNS1', 'guideDNS2', 'guideDNS3', 'guideDNS4'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = ip;
+            });
+        }
+    } catch (e) {
+        console.warn('Failed to load server info:', e);
+    }
+}
+
+// Setup tabs in wizard
+document.addEventListener('click', (e) => {
+    const tab = e.target.closest('.setup-tab');
+    if (!tab) return;
+    const target = tab.dataset.target;
+
+    tab.closest('.setup-tabs').querySelectorAll('.setup-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    const wizard = tab.closest('.wizard-card') || tab.closest('.wizard-panel');
+    if (wizard) {
+        wizard.querySelectorAll('.setup-guide').forEach(g => g.classList.remove('active'));
+        const guide = document.getElementById(target);
+        if (guide) guide.classList.add('active');
+    }
+});
+
+// Password strength indicator
+document.addEventListener('input', (e) => {
+    if (e.target.id === 'setupPassword') {
+        const val = e.target.value;
+        const bar = document.getElementById('passwordStrength');
+        if (!bar) return;
+        let strength = 0;
+        if (val.length >= 4) strength += 25;
+        if (val.length >= 8) strength += 25;
+        if (/[A-Z]/.test(val) && /[a-z]/.test(val)) strength += 25;
+        if (/[0-9!@#$%^&*]/.test(val)) strength += 25;
+        const colors = { 25: '#ff4466', 50: '#ffaa00', 75: '#00aaff', 100: '#00ff88' };
+        bar.style.setProperty('--strength', strength + '%');
+        bar.style.setProperty('--strength-color', colors[strength] || '#ff4466');
+    }
+});
+
 function initLoginForms() {
-    // Setup form
+    // Setup form (wizard step 2)
     document.getElementById('setupForm')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const password = document.getElementById('setupPassword').value;
         const confirm = document.getElementById('setupPasswordConfirm').value;
+        const errEl = document.getElementById('setupError');
 
         if (password.length < 4) {
-            showLoginError('Password must be at least 4 characters');
+            if (errEl) { errEl.textContent = 'Password must be at least 4 characters'; errEl.style.display = 'block'; errEl.classList.add('visible'); }
             return;
         }
         if (password !== confirm) {
-            showLoginError('Passwords do not match');
+            if (errEl) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; errEl.classList.add('visible'); }
             return;
         }
 
@@ -85,22 +175,39 @@ function initLoginForms() {
             });
 
             if (resp.ok) {
-                const data = await resp.json();
-                if (data.token) {
-                    authToken = data.token;
-                    localStorage.setItem('sowa_token', authToken);
+                // Now auto-login
+                const loginResp = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: document.getElementById('setupUsername').value || 'admin',
+                        password: password
+                    })
+                });
+                if (loginResp.ok) {
+                    const data = await loginResp.json();
+                    if (data.token) {
+                        authToken = data.token;
+                        localStorage.setItem('sowa_token', authToken);
+                    }
                 }
-                showApp();
+                // Move to DNS setup step
+                wizardNext(3);
             } else {
                 const err = await resp.json().catch(() => ({}));
-                showLoginError(err.error || 'Setup failed');
+                if (errEl) { errEl.textContent = err.error || 'Setup failed'; errEl.style.display = 'block'; errEl.classList.add('visible'); }
             }
         } catch (e) {
-            showLoginError('Connection error');
+            if (errEl) { errEl.textContent = 'Connection error'; errEl.style.display = 'block'; errEl.classList.add('visible'); }
         }
     });
 
-    // Login form
+    // Wizard finish → open dashboard
+    document.getElementById('wizardFinish')?.addEventListener('click', () => {
+        showApp();
+    });
+
+    // Login form (returning users)
     document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = document.getElementById('loginUsername').value;
@@ -260,7 +367,51 @@ function loadPageData(page) {
         case 'access': loadAccessSettings(); break;
         case 'encryption': loadEncryptionSettings(); break;
         case 'filters': loadCustomRules(); break;
+        case 'guide': loadSetupGuide(); break;
     }
+}
+
+// ==================== Setup Guide Page ====================
+
+async function loadSetupGuide() {
+    try {
+        const resp = await apiFetch('/api/system/info');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        serverInfo = data;
+
+        const ip = data.ips?.[0] || '127.0.0.1';
+        const el = document.getElementById('guideIP');
+        if (el) el.textContent = ip;
+
+        const portEl = document.getElementById('guideDNSPort');
+        if (portEl) portEl.textContent = data.dns_port || 53;
+
+        const webEl = document.getElementById('guideWebPanel');
+        if (webEl) webEl.textContent = `http://${ip}:${data.web_port || 8080}`;
+
+        // Fill all .guide-ip-code elements
+        document.querySelectorAll('.guide-ip-code').forEach(el => {
+            el.textContent = ip;
+        });
+    } catch (e) {
+        console.warn('Failed to load guide info:', e);
+    }
+}
+
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!', 'success');
+    }).catch(() => {
+        // Fallback
+        const input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showToast('Copied!', 'success');
+    });
 }
 
 // ==================== Dashboard ====================

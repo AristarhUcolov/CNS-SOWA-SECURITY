@@ -16,27 +16,159 @@
                 <h1>S.O.W.A Security</h1>
                 <p>DNS Protection & Filtering</p>
             </div>
-            <!-- Setup Form (first-time) -->
-            <form class="login-form" id="setupForm" style="display:none;">
-                <h3>Initial Setup</h3>
-                <p class="hint">Create your admin account to protect the dashboard.</p>
-                <div class="form-group">
-                    <label><i class="fas fa-user"></i> Username</label>
-                    <input type="text" id="setupUsername" value="admin" autocomplete="username">
+
+            <!-- ===== Setup Wizard (first-time) ===== -->
+            <div class="setup-wizard" id="setupWizard" style="display:none;">
+                <!-- Progress Steps -->
+                <div class="wizard-progress">
+                    <div class="wizard-step active" data-step="1"><span>1</span><small>Welcome</small></div>
+                    <div class="wizard-line"></div>
+                    <div class="wizard-step" data-step="2"><span>2</span><small>Account</small></div>
+                    <div class="wizard-line"></div>
+                    <div class="wizard-step" data-step="3"><span>3</span><small>DNS Setup</small></div>
+                    <div class="wizard-line"></div>
+                    <div class="wizard-step" data-step="4"><span>4</span><small>Done</small></div>
                 </div>
-                <div class="form-group">
-                    <label><i class="fas fa-lock"></i> Password</label>
-                    <input type="password" id="setupPassword" placeholder="Enter password" autocomplete="new-password">
+
+                <!-- Step 1: Welcome -->
+                <div class="wizard-panel active" id="wizardStep1">
+                    <div class="wizard-card">
+                        <h3><i class="fas fa-rocket"></i> Welcome to S.O.W.A Security!</h3>
+                        <p>S.O.W.A is your personal DNS protection system by <b>C.N.S (Clear Net Sky)</b>.</p>
+                        <div class="wizard-features">
+                            <div class="wizard-feature"><i class="fas fa-ban"></i><span>Block ads, trackers & malware</span></div>
+                            <div class="wizard-feature"><i class="fas fa-shield-halved"></i><span>Protect all devices on your network</span></div>
+                            <div class="wizard-feature"><i class="fas fa-search"></i><span>Safe Search enforcement</span></div>
+                            <div class="wizard-feature"><i class="fas fa-chart-line"></i><span>Real-time statistics & query log</span></div>
+                            <div class="wizard-feature"><i class="fas fa-network-wired"></i><span>DHCP server with per-client settings</span></div>
+                            <div class="wizard-feature"><i class="fas fa-lock"></i><span>DNS-over-HTTPS & DNS-over-TLS</span></div>
+                        </div>
+                        <div class="wizard-actions">
+                            <button class="btn btn-primary btn-full" onclick="wizardNext(2)">
+                                <i class="fas fa-arrow-right"></i> Let's Get Started
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label><i class="fas fa-lock"></i> Confirm Password</label>
-                    <input type="password" id="setupPasswordConfirm" placeholder="Confirm password" autocomplete="new-password">
+
+                <!-- Step 2: Create Account -->
+                <div class="wizard-panel" id="wizardStep2">
+                    <div class="wizard-card">
+                        <h3><i class="fas fa-user-plus"></i> Create Admin Account</h3>
+                        <p>Set up a username and password to protect your dashboard.</p>
+                        <form id="setupForm" class="wizard-form">
+                            <div class="form-group">
+                                <label><i class="fas fa-user"></i> Username</label>
+                                <input type="text" id="setupUsername" value="admin" autocomplete="username">
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-lock"></i> Password</label>
+                                <input type="password" id="setupPassword" placeholder="Min. 4 characters" autocomplete="new-password">
+                                <div class="password-strength" id="passwordStrength"></div>
+                            </div>
+                            <div class="form-group">
+                                <label><i class="fas fa-lock"></i> Confirm Password</label>
+                                <input type="password" id="setupPasswordConfirm" placeholder="Repeat password" autocomplete="new-password">
+                            </div>
+                            <div class="login-error" id="setupError"></div>
+                            <div class="wizard-actions">
+                                <button type="button" class="btn btn-secondary" onclick="wizardNext(1)"><i class="fas fa-arrow-left"></i> Back</button>
+                                <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Create Account</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-                <button type="submit" class="btn btn-primary btn-full">
-                    <i class="fas fa-check"></i> Create Account
-                </button>
-            </form>
-            <!-- Login Form -->
+
+                <!-- Step 3: DNS Setup Guide -->
+                <div class="wizard-panel" id="wizardStep3">
+                    <div class="wizard-card">
+                        <h3><i class="fas fa-network-wired"></i> Configure DNS on Your Devices</h3>
+                        <p>To start filtering, point your device's DNS to this server.</p>
+                        <div class="setup-info-box" id="serverAddresses">
+                            <div class="info-row"><span class="info-label">Server IP:</span><span class="info-value" id="wizardServerIP">Loading...</span></div>
+                            <div class="info-row"><span class="info-label">DNS Port:</span><span class="info-value" id="wizardDNSPort">53</span></div>
+                            <div class="info-row"><span class="info-label">Web Panel:</span><span class="info-value" id="wizardWebURL">Loading...</span></div>
+                        </div>
+
+                        <div class="setup-tabs">
+                            <button class="setup-tab active" data-target="guide-windows"><i class="fab fa-windows"></i> Windows</button>
+                            <button class="setup-tab" data-target="guide-router"><i class="fas fa-wifi"></i> Router</button>
+                            <button class="setup-tab" data-target="guide-android"><i class="fab fa-android"></i> Android</button>
+                            <button class="setup-tab" data-target="guide-mac"><i class="fab fa-apple"></i> macOS</button>
+                        </div>
+
+                        <div class="setup-guide active" id="guide-windows">
+                            <ol class="guide-steps">
+                                <li>Open <b>Settings</b> → <b>Network & Internet</b> → <b>Wi-Fi</b> (or Ethernet)</li>
+                                <li>Click <b>Properties</b> for your connection</li>
+                                <li>Scroll to <b>IP settings</b> → Click <b>Edit</b></li>
+                                <li>Change to <b>Manual</b>, enable <b>IPv4</b></li>
+                                <li>Set <b>Preferred DNS</b> to: <code id="guideDNS1">loading...</code></li>
+                                <li>Set <b>Alternate DNS</b> to: <code>1.1.1.1</code> (fallback)</li>
+                                <li>Click <b>Save</b> — protection is now active!</li>
+                            </ol>
+                        </div>
+
+                        <div class="setup-guide" id="guide-router">
+                            <ol class="guide-steps">
+                                <li>Open your router admin panel (usually <code>192.168.0.1</code> or <code>192.168.1.1</code>)</li>
+                                <li>Find <b>DNS Settings</b> (usually under DHCP, WAN, or Internet settings)</li>
+                                <li>Set <b>Primary DNS</b> to: <code id="guideDNS2">loading...</code></li>
+                                <li>Set <b>Secondary DNS</b> to: <code>1.1.1.1</code> (fallback)</li>
+                                <li><b>Save</b> and restart router if needed</li>
+                                <li>All devices on your network are now protected! 🛡️</li>
+                            </ol>
+                        </div>
+
+                        <div class="setup-guide" id="guide-android">
+                            <ol class="guide-steps">
+                                <li>Open <b>Settings</b> → <b>Wi-Fi</b></li>
+                                <li>Long-press your connected network → <b>Modify network</b></li>
+                                <li>Show <b>Advanced options</b></li>
+                                <li>Change <b>IP settings</b> to <b>Static</b></li>
+                                <li>Set <b>DNS 1</b> to: <code id="guideDNS3">loading...</code></li>
+                                <li>Set <b>DNS 2</b> to: <code>1.1.1.1</code></li>
+                                <li>Tap <b>Save</b></li>
+                            </ol>
+                        </div>
+
+                        <div class="setup-guide" id="guide-mac">
+                            <ol class="guide-steps">
+                                <li>Open <b>System Settings</b> → <b>Network</b></li>
+                                <li>Select your active connection (Wi-Fi / Ethernet)</li>
+                                <li>Click <b>Details</b> → <b>DNS</b></li>
+                                <li>Remove existing entries, add: <code id="guideDNS4">loading...</code></li>
+                                <li>Optionally add: <code>1.1.1.1</code></li>
+                                <li>Click <b>OK</b> → <b>Apply</b></li>
+                            </ol>
+                        </div>
+
+                        <div class="wizard-actions">
+                            <button class="btn btn-secondary" onclick="wizardNext(2)"><i class="fas fa-arrow-left"></i> Back</button>
+                            <button class="btn btn-primary" onclick="wizardNext(4)"><i class="fas fa-arrow-right"></i> Continue</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Done -->
+                <div class="wizard-panel" id="wizardStep4">
+                    <div class="wizard-card wizard-done">
+                        <div class="done-icon"><i class="fas fa-check-circle"></i></div>
+                        <h3>You're All Set! 🎉</h3>
+                        <p>S.O.W.A Security is now protecting your DNS traffic.</p>
+                        <div class="done-summary">
+                            <div class="done-item"><i class="fas fa-shield-halved"></i> 29 blocklists active</div>
+                            <div class="done-item"><i class="fas fa-search"></i> Safe Search enabled</div>
+                            <div class="done-item"><i class="fas fa-chart-line"></i> Statistics collecting</div>
+                        </div>
+                        <button class="btn btn-primary btn-full btn-lg" id="wizardFinish">
+                            <i class="fas fa-rocket"></i> Open Dashboard
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Form (returning users) -->
             <form class="login-form" id="loginForm" style="display:none;">
                 <div class="form-group">
                     <label><i class="fas fa-user"></i> Username</label>
@@ -104,6 +236,9 @@
                 </li>
                 <li class="nav-item" data-page="access">
                     <a href="#access"><i class="fas fa-user-shield"></i><span>Access Control</span></a>
+                </li>
+                <li class="nav-item" data-page="guide">
+                    <a href="#guide"><i class="fas fa-book"></i><span>Setup Guide</span></a>
                 </li>
             </ul>
             
@@ -644,6 +779,119 @@
                                 <i class="fas fa-save"></i> Save Access Settings
                             </button>
                         </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Setup Guide Page -->
+            <div class="page" id="page-guide">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-server"></i> Your Server Addresses</h3></div>
+                    <div class="card-body">
+                        <div class="server-info-grid" id="guideServerInfo">
+                            <div class="server-info-card">
+                                <div class="server-info-icon"><i class="fas fa-network-wired"></i></div>
+                                <div class="server-info-text">
+                                    <small>Server IPv4</small>
+                                    <strong id="guideIP">Loading...</strong>
+                                </div>
+                                <button class="btn btn-sm" onclick="copyText(this.closest('.server-info-card').querySelector('strong').textContent)" title="Copy"><i class="fas fa-copy"></i></button>
+                            </div>
+                            <div class="server-info-card">
+                                <div class="server-info-icon"><i class="fas fa-globe"></i></div>
+                                <div class="server-info-text">
+                                    <small>DNS Port</small>
+                                    <strong id="guideDNSPort">53</strong>
+                                </div>
+                            </div>
+                            <div class="server-info-card">
+                                <div class="server-info-icon"><i class="fas fa-desktop"></i></div>
+                                <div class="server-info-text">
+                                    <small>Web Panel</small>
+                                    <strong id="guideWebPanel">Loading...</strong>
+                                </div>
+                                <button class="btn btn-sm" onclick="copyText(this.closest('.server-info-card').querySelector('strong').textContent)" title="Copy"><i class="fas fa-copy"></i></button>
+                            </div>
+                            <div class="server-info-card">
+                                <div class="server-info-icon"><i class="fas fa-laptop"></i></div>
+                                <div class="server-info-text">
+                                    <small>Localhost</small>
+                                    <strong>127.0.0.1</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><h3><i class="fab fa-windows"></i> Windows Setup</h3></div>
+                    <div class="card-body">
+                        <ol class="guide-steps-page">
+                            <li>Open <b>Settings</b> → <b>Network & Internet</b></li>
+                            <li>Click your connection (Wi-Fi or Ethernet) → <b>Properties</b></li>
+                            <li>Under <b>IP settings</b>, click <b>Edit</b></li>
+                            <li>Switch to <b>Manual</b>, enable <b>IPv4</b></li>
+                            <li>In <b>Preferred DNS</b>, enter: <code class="guide-ip-code">loading...</code></li>
+                            <li>In <b>Alternate DNS</b>: <code>1.1.1.1</code> (fallback)</li>
+                            <li>Save — you're protected!</li>
+                        </ol>
+                        <div class="guide-note">
+                            <i class="fas fa-info-circle"></i>
+                            You can also use <code>127.0.0.1</code> if S.O.W.A is running on this same computer.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-wifi"></i> Router Setup (Protect Entire Network)</h3></div>
+                    <div class="card-body">
+                        <ol class="guide-steps-page">
+                            <li>Open your router's admin panel (usually <code>192.168.0.1</code> or <code>192.168.1.1</code>)</li>
+                            <li>Find <b>DNS settings</b> (usually under DHCP, WAN, or Internet)</li>
+                            <li>Set <b>Primary DNS</b> to: <code class="guide-ip-code">loading...</code></li>
+                            <li>Set <b>Secondary DNS</b> to: <code>1.1.1.1</code></li>
+                            <li>Save and restart the router if needed</li>
+                        </ol>
+                        <div class="guide-note success">
+                            <i class="fas fa-shield-halved"></i>
+                            This will protect <b>all devices</b> on your network — phones, tablets, smart TVs, etc.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><h3><i class="fab fa-android"></i> Android & <i class="fab fa-apple"></i> iOS</h3></div>
+                    <div class="card-body">
+                        <h4>Android</h4>
+                        <ol class="guide-steps-page">
+                            <li>Settings → Wi-Fi → Long-press your network → Modify</li>
+                            <li>Advanced options → IP settings: <b>Static</b></li>
+                            <li>DNS 1: <code class="guide-ip-code">loading...</code></li>
+                            <li>DNS 2: <code>1.1.1.1</code></li>
+                        </ol>
+                        <h4 style="margin-top: 20px;">iOS / iPadOS</h4>
+                        <ol class="guide-steps-page">
+                            <li>Settings → Wi-Fi → (i) next to your network</li>
+                            <li>Configure DNS → Manual</li>
+                            <li>Remove existing, add: <code class="guide-ip-code">loading...</code></li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header"><h3><i class="fab fa-apple"></i> macOS & <i class="fab fa-linux"></i> Linux</h3></div>
+                    <div class="card-body">
+                        <h4>macOS</h4>
+                        <ol class="guide-steps-page">
+                            <li>System Settings → Network → your connection → Details → DNS</li>
+                            <li>Add: <code class="guide-ip-code">loading...</code></li>
+                        </ol>
+                        <h4 style="margin-top: 20px;">Linux (systemd-resolved)</h4>
+                        <ol class="guide-steps-page">
+                            <li>Edit <code>/etc/systemd/resolved.conf</code></li>
+                            <li>Set <code>DNS=<span class="guide-ip-code">loading...</span></code></li>
+                            <li>Run: <code>sudo systemctl restart systemd-resolved</code></li>
+                        </ol>
                     </div>
                 </div>
             </div>

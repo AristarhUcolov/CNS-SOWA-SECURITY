@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/auth"
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/config"
@@ -19,28 +20,30 @@ import (
 
 // Server represents the API/Web server
 type Server struct {
-	cfg     *config.Config
-	dns     *dnsserver.Server
-	filter  *filtering.Engine
-	dhcp    *dhcp.Server
-	stats   *stats.Collector
-	auth    *auth.Manager
-	httpSrv *http.Server
-	mux     *http.ServeMux
-	webDir  string
+	cfg       *config.Config
+	dns       *dnsserver.Server
+	filter    *filtering.Engine
+	dhcp      *dhcp.Server
+	stats     *stats.Collector
+	auth      *auth.Manager
+	httpSrv   *http.Server
+	mux       *http.ServeMux
+	webDir    string
+	startTime time.Time
 }
 
 // New creates a new API server
 func New(cfg *config.Config, dns *dnsserver.Server, filter *filtering.Engine, dhcpSrv *dhcp.Server, statsCollector *stats.Collector, authMgr *auth.Manager, webDir string) *Server {
 	s := &Server{
-		cfg:    cfg,
-		dns:    dns,
-		filter: filter,
-		dhcp:   dhcpSrv,
-		stats:  statsCollector,
-		auth:   authMgr,
-		mux:    http.NewServeMux(),
-		webDir: webDir,
+		cfg:       cfg,
+		dns:       dns,
+		filter:    filter,
+		dhcp:      dhcpSrv,
+		stats:     statsCollector,
+		auth:      authMgr,
+		mux:       http.NewServeMux(),
+		webDir:    webDir,
+		startTime: time.Now(),
 	}
 
 	s.registerRoutes()
@@ -121,6 +124,12 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/status", s.handleStatus)
 	s.mux.HandleFunc("/api/test", s.handleTestDomain)
 	s.mux.HandleFunc("/api/system/info", s.handleSystemInfo)
+	s.mux.HandleFunc("/api/blocked-services", s.handleBlockedServices)
+	s.mux.HandleFunc("/api/blocked-services/available", s.handleAvailableServices)
+	s.mux.HandleFunc("/api/dns-rewrites", s.handleDNSRewrites)
+	s.mux.HandleFunc("/api/querylog/export", s.handleQueryLogExport)
+	s.mux.HandleFunc("/api/stats/export", s.handleStatsExport)
+	s.mux.HandleFunc("/api/stats/reset", s.handleStatsReset)
 
 	// Static files (web UI)
 	s.mux.Handle("/", http.FileServer(http.Dir(s.webDir)))
@@ -406,35 +415,30 @@ func (s *Server) handleQueryLog(w http.ResponseWriter, r *http.Request) {
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100
 	if limitStr != "" {
-		if v, err := strconv.Atoi(limitStr); err == nil {
+		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 {
 			limit = v
 		}
 	}
 
-	filterType := r.URL.Query().Get("filter")
-	entries := stats.GetQueryLog(limit)
-
-	// Apply filter
-	switch filterType {
-	case "blocked":
-		var filtered []stats.QueryLogEntry
-		for _, e := range entries {
-			if e.Blocked {
-				filtered = append(filtered, e)
-			}
+	offsetStr := r.URL.Query().Get("offset")
+	offset := 0
+	if offsetStr != "" {
+		if v, err := strconv.Atoi(offsetStr); err == nil && v >= 0 {
+			offset = v
 		}
-		entries = filtered
-	case "allowed":
-		var filtered []stats.QueryLogEntry
-		for _, e := range entries {
-			if !e.Blocked {
-				filtered = append(filtered, e)
-			}
-		}
-		entries = filtered
 	}
 
-	jsonResponse(w, map[string]interface{}{"entries": entries})
+	filterType := r.URL.Query().Get("filter")
+	search := r.URL.Query().Get("search")
+
+	entries, total := stats.SearchQueryLog(search, filterType, offset, limit)
+
+	jsonResponse(w, map[string]interface{}{
+		"entries": entries,
+		"total":   total,
+		"offset":  offset,
+		"limit":   limit,
+	})
 }
 
 func (s *Server) handleClients(w http.ResponseWriter, r *http.Request) {
@@ -497,13 +501,16 @@ func (s *Server) handleCacheClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	uptime := time.Since(s.startTime)
 	jsonResponse(w, map[string]interface{}{
 		"dns_running":  s.dns.IsRunning(),
 		"dhcp_running": s.dhcp.IsRunning(),
 		"protection":   s.cfg.Filtering.Enabled,
-		"version":      "1.0.0",
+		"version":      "1.3.0",
 		"cache_size":   s.dns.CacheSize(),
 		"dhcp_leases":  s.dhcp.GetLeaseCount(),
+		"uptime":       int64(uptime.Seconds()),
+		"start_time":   s.startTime.Format(time.RFC3339),
 	})
 }
 
@@ -742,11 +749,132 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"version":  "1.0.0",
+		"version":  "1.3.0",
 		"dns_port": s.cfg.DNS.Port,
 		"web_port": s.cfg.Web.Port,
 		"ips":      ips,
 	})
+}
+
+// ==================== Blocked Services ====================
+
+func (s *Server) handleBlockedServices(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		jsonResponse(w, map[string]interface{}{
+			"blocked": s.cfg.Filtering.BlockedServices,
+		})
+	case "PUT":
+		var req struct {
+			Services []string `json:"services"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		s.cfg.Update(func(cfg *config.Config) {
+			cfg.Filtering.BlockedServices = req.Services
+		})
+		jsonResponse(w, map[string]string{"status": "ok"})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleAvailableServices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	jsonResponse(w, map[string]interface{}{
+		"services": filtering.GetAvailableServices(),
+	})
+}
+
+// ==================== DNS Rewrites ====================
+
+func (s *Server) handleDNSRewrites(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		jsonResponse(w, map[string]interface{}{
+			"rewrites": s.cfg.Filtering.DNSRewrites,
+		})
+	case "POST":
+		var rw config.DNSRewrite
+		if err := json.NewDecoder(r.Body).Decode(&rw); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+		if rw.Domain == "" || rw.Answer == "" {
+			http.Error(w, `{"error":"domain and answer required"}`, http.StatusBadRequest)
+			return
+		}
+		s.cfg.Update(func(cfg *config.Config) {
+			cfg.Filtering.DNSRewrites = append(cfg.Filtering.DNSRewrites, rw)
+		})
+		jsonResponse(w, map[string]string{"status": "ok"})
+	case "DELETE":
+		indexStr := r.URL.Query().Get("index")
+		index, err := strconv.Atoi(indexStr)
+		if err != nil || index < 0 || index >= len(s.cfg.Filtering.DNSRewrites) {
+			http.Error(w, `{"error":"invalid index"}`, http.StatusBadRequest)
+			return
+		}
+		s.cfg.Update(func(cfg *config.Config) {
+			cfg.Filtering.DNSRewrites = append(cfg.Filtering.DNSRewrites[:index], cfg.Filtering.DNSRewrites[index+1:]...)
+		})
+		jsonResponse(w, map[string]string{"status": "ok"})
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// ==================== Export ====================
+
+func (s *Server) handleQueryLogExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	entries, _ := stats.SearchQueryLog("", "", 0, 10000)
+
+	format := r.URL.Query().Get("format")
+	if format == "json" {
+		w.Header().Set("Content-Disposition", "attachment; filename=querylog.json")
+		jsonResponse(w, entries)
+		return
+	}
+
+	// CSV export
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=querylog.csv")
+	fmt.Fprintln(w, "Timestamp,Domain,Type,Client IP,Blocked,Reason,Duration")
+	for _, e := range entries {
+		fmt.Fprintf(w, "%s,%s,%s,%s,%t,%s,%s\n",
+			e.Timestamp.Format("2006-01-02 15:04:05"),
+			e.Domain, e.Type, e.ClientIP, e.Blocked, e.Reason, e.Duration)
+	}
+}
+
+func (s *Server) handleStatsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	st := s.stats.GetStats()
+	w.Header().Set("Content-Disposition", "attachment; filename=stats.json")
+	jsonResponse(w, st)
+}
+
+func (s *Server) handleStatsReset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.stats.Reset()
+	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
 // ==================== Helpers ====================

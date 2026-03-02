@@ -368,6 +368,8 @@ function loadPageData(page) {
         case 'encryption': loadEncryptionSettings(); break;
         case 'filters': loadCustomRules(); break;
         case 'guide': loadSetupGuide(); break;
+        case 'blocked-services': loadBlockedServices(); break;
+        case 'dns-rewrites': loadDNSRewrites(); break;
     }
 }
 
@@ -418,21 +420,35 @@ function copyText(text) {
 
 async function loadDashboard() {
     try {
-        const resp = await apiFetch('/api/stats');
-        if (!resp.ok) return;
-        const data = await resp.json();
+        const [statsResp, statusResp] = await Promise.all([
+            apiFetch('/api/stats'),
+            apiFetch('/api/status')
+        ]);
 
-        animateNumber('totalQueries', data.total_queries || 0);
-        animateNumber('blockedQueries', data.blocked_queries || 0);
+        if (statsResp.ok) {
+            const data = await statsResp.json();
 
-        const percentage = data.total_queries > 0
-            ? ((data.blocked_queries / data.total_queries) * 100).toFixed(1)
-            : 0;
-        document.getElementById('blockedPercentage').textContent = percentage + '%';
-        document.getElementById('avgResponseTime').textContent = (data.average_time_ms || 0).toFixed(1) + 'ms';
+            animateNumber('totalQueries', data.total_queries || 0);
+            animateNumber('blockedQueries', data.blocked_queries || 0);
 
-        updateCharts(data);
-        updateTopTables(data);
+            const percentage = data.total_queries > 0
+                ? ((data.blocked_queries / data.total_queries) * 100).toFixed(1)
+                : 0;
+            document.getElementById('blockedPercentage').textContent = percentage + '%';
+            document.getElementById('avgResponseTime').textContent = (data.average_time_ms || 0).toFixed(1) + 'ms';
+
+            updateCharts(data);
+            updateTopTables(data);
+        }
+
+        if (statusResp.ok) {
+            const status = await statusResp.json();
+            const cacheEl = document.getElementById('cacheSize');
+            if (cacheEl) cacheEl.textContent = formatNumber(status.cache_size || 0);
+
+            const uptimeEl = document.getElementById('serverUptime');
+            if (uptimeEl) uptimeEl.textContent = formatUptime(status.uptime || 0);
+        }
     } catch (e) {
         if (e.message !== 'Unauthorized') console.error('Error loading dashboard:', e);
     }
@@ -854,15 +870,27 @@ function initForms() {
         }
     });
 
-    // Query log filter
-    document.getElementById('queryLogFilter')?.addEventListener('change', loadQueryLog);
+    // Query log filter, search, pagination, export
+    document.getElementById('queryLogFilter')?.addEventListener('change', () => { qlCurrentPage = 0; loadQueryLog(); });
     document.getElementById('refreshQueryLog')?.addEventListener('click', loadQueryLog);
+    document.getElementById('queryLogSearch')?.addEventListener('input', debounce(() => { qlCurrentPage = 0; loadQueryLog(); }, 400));
+    document.getElementById('qlPrevPage')?.addEventListener('click', () => { if (qlCurrentPage > 0) { qlCurrentPage--; loadQueryLog(); } });
+    document.getElementById('qlNextPage')?.addEventListener('click', () => { qlCurrentPage++; loadQueryLog(); });
+    document.getElementById('exportQueryLog')?.addEventListener('click', () => {
+        window.open(`${API_BASE}/api/querylog/export?format=csv`, '_blank');
+    });
 
     // Add client
     document.getElementById('addClient')?.addEventListener('click', showAddClientModal);
 
     // Toggle protection
     document.getElementById('toggleProtection')?.addEventListener('click', toggleProtection);
+
+    // Blocked Services
+    document.getElementById('saveBlockedServices')?.addEventListener('click', saveBlockedServices);
+
+    // DNS Rewrites
+    document.getElementById('addDNSRewrite')?.addEventListener('click', showAddDNSRewriteModal);
 
     // Modal close
     document.getElementById('modalClose')?.addEventListener('click', closeModal);
@@ -1028,12 +1056,24 @@ async function refreshAllLists() {
 
 // ==================== Query Log ====================
 
+let qlCurrentPage = 0;
+const qlPageSize = 50;
+let qlTotalEntries = 0;
+
 async function loadQueryLog() {
     try {
         const filter = getValue('queryLogFilter') || 'all';
-        const resp = await apiFetch(`/api/querylog?limit=100&filter=${filter}`);
+        const search = getValue('queryLogSearch') || '';
+        const offset = qlCurrentPage * qlPageSize;
+        const filterParam = filter === 'all' ? '' : `&filter=${filter}`;
+        const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+
+        const resp = await apiFetch(`/api/querylog?limit=${qlPageSize}&offset=${offset}${filterParam}${searchParam}`);
         if (!resp.ok) return;
         const data = await resp.json();
+
+        qlTotalEntries = data.total || 0;
+        const totalPages = Math.max(1, Math.ceil(qlTotalEntries / qlPageSize));
 
         const tbody = document.querySelector('#queryLogTable tbody');
         if (!tbody) return;
@@ -1041,24 +1081,32 @@ async function loadQueryLog() {
         const entries = data.entries || [];
         if (entries.length === 0) {
             tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-clipboard-list"></i> No queries logged yet</td></tr>';
-            return;
+        } else {
+            tbody.innerHTML = entries.map(entry => {
+                const rowClass = entry.blocked ? 'blocked-row' : 'allowed-row';
+                const status = entry.blocked
+                    ? `<span style="color:var(--danger)"><i class="fas fa-ban"></i> Blocked (${escapeHtml(entry.reason)})</span>`
+                    : `<span style="color:var(--success)"><i class="fas fa-check"></i> ${escapeHtml(entry.reason)}</span>`;
+                const time = new Date(entry.timestamp).toLocaleTimeString();
+                return `<tr class="${rowClass}">
+                    <td>${time}</td>
+                    <td>${escapeHtml(entry.domain)}</td>
+                    <td>${escapeHtml(entry.type)}</td>
+                    <td>${escapeHtml(entry.client_ip)}</td>
+                    <td>${status}</td>
+                    <td>${escapeHtml(entry.duration)}</td>
+                </tr>`;
+            }).join('');
         }
 
-        tbody.innerHTML = entries.map(entry => {
-            const rowClass = entry.blocked ? 'blocked-row' : 'allowed-row';
-            const status = entry.blocked
-                ? `<span style="color:var(--danger)"><i class="fas fa-ban"></i> Blocked (${escapeHtml(entry.reason)})</span>`
-                : `<span style="color:var(--success)"><i class="fas fa-check"></i> ${escapeHtml(entry.reason)}</span>`;
-            const time = new Date(entry.timestamp).toLocaleTimeString();
-            return `<tr class="${rowClass}">
-                <td>${time}</td>
-                <td>${escapeHtml(entry.domain)}</td>
-                <td>${escapeHtml(entry.type)}</td>
-                <td>${escapeHtml(entry.client_ip)}</td>
-                <td>${status}</td>
-                <td>${escapeHtml(entry.duration)}</td>
-            </tr>`;
-        }).join('');
+        // Update pagination
+        const pageInfo = document.getElementById('qlPageInfo');
+        if (pageInfo) pageInfo.textContent = `Page ${qlCurrentPage + 1} of ${totalPages} (${qlTotalEntries} entries)`;
+
+        const prevBtn = document.getElementById('qlPrevPage');
+        const nextBtn = document.getElementById('qlNextPage');
+        if (prevBtn) prevBtn.disabled = qlCurrentPage === 0;
+        if (nextBtn) nextBtn.disabled = qlCurrentPage >= totalPages - 1;
     } catch (e) {
         if (e.message !== 'Unauthorized') console.error('Error loading query log:', e);
     }
@@ -1307,6 +1355,178 @@ async function loadCustomRules() {
     }
 }
 
+// ==================== Blocked Services ====================
+
+const serviceIcons = {
+    facebook: 'fab fa-facebook', instagram: 'fab fa-instagram', twitter: 'fab fa-twitter',
+    youtube: 'fab fa-youtube', tiktok: 'fab fa-tiktok', snapchat: 'fab fa-snapchat',
+    discord: 'fab fa-discord', telegram: 'fab fa-telegram', whatsapp: 'fab fa-whatsapp',
+    twitch: 'fab fa-twitch', netflix: 'fas fa-film', spotify: 'fab fa-spotify',
+    reddit: 'fab fa-reddit', pinterest: 'fab fa-pinterest', steam: 'fab fa-steam',
+    epicgames: 'fas fa-gamepad', amazon: 'fab fa-amazon', ebay: 'fas fa-shopping-cart',
+    roblox: 'fas fa-cube', vk: 'fab fa-vk', tumblr: 'fab fa-tumblr',
+    linkedin: 'fab fa-linkedin', skype: 'fab fa-skype'
+};
+
+async function loadBlockedServices() {
+    try {
+        const [blockedResp, availResp] = await Promise.all([
+            apiFetch('/api/blocked-services'),
+            apiFetch('/api/blocked-services/available')
+        ]);
+
+        let blocked = [];
+        let available = [];
+
+        if (blockedResp.ok) {
+            const data = await blockedResp.json();
+            blocked = data.blocked || [];
+        }
+        if (availResp.ok) {
+            const data = await availResp.json();
+            available = data.services || [];
+        }
+
+        const grid = document.getElementById('servicesGrid');
+        if (!grid) return;
+
+        // Sort alphabetically
+        available.sort();
+
+        grid.innerHTML = available.map(svc => {
+            const isBlocked = blocked.includes(svc);
+            const icon = serviceIcons[svc] || 'fas fa-globe';
+            const name = svc.charAt(0).toUpperCase() + svc.slice(1);
+            return `
+                <div class="service-item ${isBlocked ? 'blocked' : ''}" data-service="${escapeHtml(svc)}">
+                    <div class="service-name">
+                        <i class="${icon}"></i>
+                        <span>${name}</span>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" ${isBlocked ? 'checked' : ''} data-svc="${escapeHtml(svc)}">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            `;
+        }).join('');
+
+        // Update visual state on toggle
+        grid.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                cb.closest('.service-item').classList.toggle('blocked', cb.checked);
+            });
+        });
+    } catch (e) {
+        if (e.message !== 'Unauthorized') console.error('Error loading blocked services:', e);
+    }
+}
+
+async function saveBlockedServices() {
+    const checkboxes = document.querySelectorAll('#servicesGrid input[data-svc]');
+    const services = [];
+    checkboxes.forEach(cb => {
+        if (cb.checked) services.push(cb.dataset.svc);
+    });
+
+    try {
+        const resp = await apiFetch('/api/blocked-services', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ services })
+        });
+        if (resp.ok) showToast(`${services.length} services blocked`, 'success');
+        else showToast('Failed to save blocked services', 'error');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error saving blocked services', 'error');
+    }
+}
+
+// ==================== DNS Rewrites ====================
+
+async function loadDNSRewrites() {
+    try {
+        const resp = await apiFetch('/api/dns-rewrites');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const rewrites = data.rewrites || [];
+
+        const tbody = document.querySelector('#dnsRewritesTable tbody');
+        if (!tbody) return;
+
+        if (rewrites.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><i class="fas fa-exchange-alt"></i> No DNS rewrites configured</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rewrites.map((rw, i) => `
+            <tr>
+                <td><code>${escapeHtml(rw.domain)}</code></td>
+                <td><code>${escapeHtml(rw.answer)}</code></td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="removeDNSRewrite(${i})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') console.error('Error loading DNS rewrites:', e);
+    }
+}
+
+function showAddDNSRewriteModal() {
+    showModal('Add DNS Rewrite', `
+        <div class="form-group">
+            <label>Domain</label>
+            <input type="text" id="rwDomain" placeholder="example.com">
+        </div>
+        <div class="form-group">
+            <label>Answer (IP or CNAME target)</label>
+            <input type="text" id="rwAnswer" placeholder="192.168.1.10 or other.example.com">
+        </div>
+        <button class="btn btn-primary" onclick="addDNSRewrite()">
+            <i class="fas fa-plus"></i> Add Rewrite
+        </button>
+    `);
+}
+
+async function addDNSRewrite() {
+    const domain = getValue('rwDomain');
+    const answer = getValue('rwAnswer');
+    if (!domain || !answer) {
+        showToast('Please fill in all fields', 'error');
+        return;
+    }
+    try {
+        const resp = await apiFetch('/api/dns-rewrites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domain, answer })
+        });
+        if (resp.ok) {
+            showToast('DNS rewrite added', 'success');
+            closeModal();
+            loadDNSRewrites();
+        } else showToast('Failed to add rewrite', 'error');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error adding rewrite', 'error');
+    }
+}
+
+async function removeDNSRewrite(index) {
+    if (!confirm('Remove this DNS rewrite?')) return;
+    try {
+        const resp = await apiFetch(`/api/dns-rewrites?index=${index}`, { method: 'DELETE' });
+        if (resp.ok) {
+            showToast('DNS rewrite removed', 'success');
+            loadDNSRewrites();
+        } else showToast('Failed to remove rewrite', 'error');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error removing rewrite', 'error');
+    }
+}
+
 // ==================== Utilities ====================
 
 function showModal(title, body) {
@@ -1374,4 +1594,25 @@ function setChecked(id, value) {
 
 function getLines(id) {
     return getValue(id).split('\n').map(l => l.trim()).filter(l => l);
+}
+
+function formatUptime(seconds) {
+    if (seconds < 60) return seconds + 's';
+    if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+    if (seconds < 86400) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return h + 'h ' + m + 'm';
+    }
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    return d + 'd ' + h + 'h';
+}
+
+function debounce(fn, delay) {
+    let timer;
+    return function (...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
 }

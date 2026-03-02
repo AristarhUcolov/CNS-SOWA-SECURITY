@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -196,7 +198,6 @@ func (c *Collector) processRecord(record QueryRecord) {
 
 // trimMap keeps only the top N entries by count
 func (c *Collector) trimMap(m map[string]int64, keepN int) {
-	// Simple approach: remove entries with lowest counts
 	if len(m) <= keepN {
 		return
 	}
@@ -211,14 +212,9 @@ func (c *Collector) trimMap(m map[string]int64, keepN int) {
 		entries = append(entries, entry{k, v})
 	}
 
-	// Sort by count (simple bubble for small sizes)
-	for i := 0; i < len(entries); i++ {
-		for j := i + 1; j < len(entries); j++ {
-			if entries[j].count > entries[i].count {
-				entries[i], entries[j] = entries[j], entries[i]
-			}
-		}
-	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].count > entries[j].count
+	})
 
 	// Remove excess entries
 	for i := keepN; i < len(entries); i++ {
@@ -331,6 +327,11 @@ func GetQueryLog(limit int) []QueryLogEntry {
 	return queryLog.GetRecent(limit)
 }
 
+// SearchQueryLog returns filtered/paginated query log entries
+func SearchQueryLog(search, filter string, offset, limit int) ([]QueryLogEntry, int) {
+	return queryLog.Search(search, filter, offset, limit)
+}
+
 // Add adds an entry to the query log
 func (ql *QueryLog) Add(entry QueryLogEntry) {
 	ql.mu.Lock()
@@ -361,6 +362,56 @@ func (ql *QueryLog) GetRecent(limit int) []QueryLogEntry {
 	}
 
 	return result
+}
+
+// Search returns query log entries matching the search term, with pagination
+func (ql *QueryLog) Search(search string, filter string, offset, limit int) ([]QueryLogEntry, int) {
+	ql.mu.RLock()
+	defer ql.mu.RUnlock()
+
+	search = strings.ToLower(search)
+	var matched []QueryLogEntry
+
+	// Iterate in reverse (newest first)
+	for i := len(ql.entries) - 1; i >= 0; i-- {
+		e := ql.entries[i]
+
+		// Apply blocked/allowed filter
+		switch filter {
+		case "blocked":
+			if !e.Blocked {
+				continue
+			}
+		case "allowed":
+			if e.Blocked {
+				continue
+			}
+		}
+
+		// Apply search filter
+		if search != "" {
+			if !strings.Contains(strings.ToLower(e.Domain), search) &&
+				!strings.Contains(strings.ToLower(e.ClientIP), search) &&
+				!strings.Contains(strings.ToLower(e.Reason), search) {
+				continue
+			}
+		}
+
+		matched = append(matched, e)
+	}
+
+	total := len(matched)
+
+	// Apply pagination
+	if offset >= total {
+		return []QueryLogEntry{}, total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+
+	return matched[offset:end], total
 }
 
 // Clear removes all query log entries

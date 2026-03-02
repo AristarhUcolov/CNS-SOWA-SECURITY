@@ -97,6 +97,13 @@ type FilteringConfig struct {
 	WhiteLists      []WhiteListConfig `json:"whitelists"`
 	CustomRules     []string          `json:"custom_rules"`
 	BlockedServices []string          `json:"blocked_services"`
+	DNSRewrites     []DNSRewrite      `json:"dns_rewrites"`
+}
+
+// DNSRewrite maps a domain to a custom IP address
+type DNSRewrite struct {
+	Domain string `json:"domain"`
+	Answer string `json:"answer"` // IP address or CNAME target
 }
 
 // SafeSearchConfig holds safe search settings for all search engines
@@ -226,6 +233,7 @@ func DefaultConfig() *Config {
 			WhiteLists:      []WhiteListConfig{},
 			CustomRules:     []string{},
 			BlockedServices: []string{},
+			DNSRewrites:     []DNSRewrite{},
 		},
 		DHCP: DHCPConfig{
 			Enabled:       false,

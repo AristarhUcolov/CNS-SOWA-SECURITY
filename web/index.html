@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>S.O.W.A Security - DNS Protection</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230a0e17'/%3E%3Cpath d='M32 8l20 8v16c0 12-8 20-20 24C20 52 12 44 12 32V16L32 8z' fill='%2300d4ff' opacity='0.2'/%3E%3Cpath d='M32 12l16 6.4v12.8c0 9.6-6.4 16-16 19.2-9.6-3.2-16-9.6-16-19.2V18.4L32 12z' fill='none' stroke='%2300d4ff' stroke-width='2'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='20' font-weight='bold' fill='%2300d4ff' font-family='Arial'%3ES%3C/text%3E%3C/svg%3E">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
 </head>
@@ -200,7 +201,7 @@
                     <i class="fas fa-shield-halved"></i>
                     <span class="logo-text">S.O.W.A</span>
                 </div>
-                <span class="version">v1.0.0</span>
+                <span class="version">v1.3.0</span>
             </div>
             
             <ul class="nav-menu">
@@ -218,6 +219,12 @@
                 </li>
                 <li class="nav-item" data-page="safesearch">
                     <a href="#safesearch"><i class="fas fa-search"></i><span>Safe Search</span></a>
+                </li>
+                <li class="nav-item" data-page="blocked-services">
+                    <a href="#blocked-services"><i class="fas fa-ban"></i><span>Blocked Services</span></a>
+                </li>
+                <li class="nav-item" data-page="dns-rewrites">
+                    <a href="#dns-rewrites"><i class="fas fa-exchange-alt"></i><span>DNS Rewrites</span></a>
                 </li>
                 <li class="nav-item" data-page="clients">
                     <a href="#clients"><i class="fas fa-laptop"></i><span>Clients</span></a>
@@ -309,6 +316,20 @@
                         <div class="stat-info">
                             <h3 id="avgResponseTime">0ms</h3>
                             <p>Avg Response</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" data-animate="fadeInUp" style="--delay: 0.4s">
+                        <div class="stat-icon cached"><i class="fas fa-database"></i></div>
+                        <div class="stat-info">
+                            <h3 id="cacheSize">0</h3>
+                            <p>Cache Size</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" data-animate="fadeInUp" style="--delay: 0.5s">
+                        <div class="stat-icon uptime"><i class="fas fa-clock"></i></div>
+                        <div class="stat-info">
+                            <h3 id="serverUptime">0s</h3>
+                            <p>Uptime</p>
                         </div>
                     </div>
                 </div>
@@ -728,11 +749,15 @@
                     <div class="card-header">
                         <h3><i class="fas fa-clipboard-list"></i> Query Log</h3>
                         <div class="header-actions">
+                            <input type="text" id="queryLogSearch" placeholder="Search domains, IPs..." class="input-mini">
                             <select id="queryLogFilter">
                                 <option value="all">All Queries</option>
                                 <option value="blocked">Blocked Only</option>
                                 <option value="allowed">Allowed Only</option>
                             </select>
+                            <button class="btn btn-sm" id="exportQueryLog" title="Export CSV">
+                                <i class="fas fa-download"></i>
+                            </button>
                             <button class="btn btn-sm" id="refreshQueryLog">
                                 <i class="fas fa-sync-alt"></i>
                             </button>
@@ -750,6 +775,47 @@
                                     <th>Duration</th>
                                 </tr>
                             </thead>
+                            <tbody></tbody>
+                        </table>
+                        <div class="pagination" id="queryLogPagination">
+                            <button class="btn btn-sm" id="qlPrevPage"><i class="fas fa-chevron-left"></i></button>
+                            <span id="qlPageInfo">Page 1</span>
+                            <button class="btn btn-sm" id="qlNextPage"><i class="fas fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blocked Services Page -->
+            <div class="page" id="page-blocked-services">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-ban"></i> Blocked Services</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="hint">Block access to popular services and social media platforms. Toggle a service to block all its domains.</p>
+                        <div class="services-grid" id="servicesGrid"></div>
+                        <br>
+                        <button class="btn btn-primary" id="saveBlockedServices">
+                            <i class="fas fa-save"></i> Save Blocked Services
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DNS Rewrites Page -->
+            <div class="page" id="page-dns-rewrites">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-exchange-alt"></i> DNS Rewrites</h3>
+                        <button class="btn btn-sm btn-primary" id="addDNSRewrite">
+                            <i class="fas fa-plus"></i> Add Rewrite
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <p class="hint">Override DNS responses for specific domains. Map a domain to a custom IP address or CNAME.</p>
+                        <table class="data-table" id="dnsRewritesTable">
+                            <thead><tr><th>Domain</th><th>Answer</th><th>Actions</th></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>

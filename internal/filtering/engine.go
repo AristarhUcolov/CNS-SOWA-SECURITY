@@ -99,6 +99,16 @@ func (e *Engine) Check(domain, clientIP string) Result {
 		}
 	}
 
+	// Check Blocked Services
+	if service, blocked := e.checkBlockedServices(domain); blocked {
+		return Result{
+			IsBlocked: true,
+			Reason:    "blocked_service",
+			Rule:      domain,
+			ListName:  service,
+		}
+	}
+
 	// Check Safe Search
 	if e.cfg.Filtering.SafeSearch.Enabled {
 		if result := e.safeSearch.Check(domain); result.IsBlocked {
@@ -443,6 +453,110 @@ func sanitizeFilename(name string) string {
 		" ", "_",
 	)
 	return replacer.Replace(name)
+}
+
+// blockedServiceDomains maps service names to their domains
+var blockedServiceDomains = map[string][]string{
+	"facebook": {
+		"facebook.com", "facebook.net", "fbcdn.net", "fbcdn.com", "fbsbx.com",
+		"fb.com", "fb.me", "messenger.com", "facebookcorewwwi.onion",
+	},
+	"instagram": {
+		"instagram.com", "cdninstagram.com", "instagr.am",
+	},
+	"twitter": {
+		"twitter.com", "t.co", "twimg.com", "tweetdeck.com", "x.com",
+	},
+	"youtube": {
+		"youtube.com", "youtu.be", "ytimg.com", "googlevideo.com",
+		"youtube-nocookie.com", "youtube-ui.l.google.com",
+	},
+	"tiktok": {
+		"tiktok.com", "tiktokcdn.com", "musical.ly", "tiktokv.com",
+		"byteoversea.com", "ibytedtos.com", "muscdn.com",
+	},
+	"snapchat": {
+		"snapchat.com", "snap.com", "snapkit.co", "bitmoji.com",
+	},
+	"discord": {
+		"discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media",
+	},
+	"telegram": {
+		"telegram.org", "t.me", "telegram.me", "telesco.pe",
+	},
+	"whatsapp": {
+		"whatsapp.com", "whatsapp.net",
+	},
+	"twitch": {
+		"twitch.tv", "twitchcdn.net", "twitchsvc.net", "jtvnw.net",
+	},
+	"netflix": {
+		"netflix.com", "nflximg.net", "nflxvideo.net", "nflxso.net", "nflxext.com",
+	},
+	"spotify": {
+		"spotify.com", "scdn.co", "spotifycdn.com", "audio-ak-spotify-com.akamaized.net",
+	},
+	"reddit": {
+		"reddit.com", "redd.it", "redditmedia.com", "redditstatic.com",
+	},
+	"pinterest": {
+		"pinterest.com", "pinimg.com",
+	},
+	"steam": {
+		"steampowered.com", "steamcommunity.com", "steamstatic.com",
+		"steamusercontent.com", "steamcontent.com",
+	},
+	"epicgames": {
+		"epicgames.com", "unrealengine.com", "fortnite.com",
+	},
+	"amazon": {
+		"amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazon.it",
+		"amazon.es", "amazon.ca", "amazon.co.jp",
+	},
+	"ebay": {
+		"ebay.com", "ebay.co.uk", "ebay.de", "ebaystatic.com", "ebayimg.com",
+	},
+	"roblox": {
+		"roblox.com", "rbxcdn.com", "roblox.qq.com",
+	},
+	"vk": {
+		"vk.com", "vkontakte.ru", "vk.me", "userapi.com",
+	},
+	"tumblr": {
+		"tumblr.com",
+	},
+	"linkedin": {
+		"linkedin.com", "licdn.com",
+	},
+	"skype": {
+		"skype.com", "skypeassets.com",
+	},
+}
+
+// checkBlockedServices checks if a domain belongs to a blocked service
+func (e *Engine) checkBlockedServices(domain string) (string, bool) {
+	for _, service := range e.cfg.Filtering.BlockedServices {
+		service = strings.ToLower(service)
+		domains, ok := blockedServiceDomains[service]
+		if !ok {
+			continue
+		}
+		for _, d := range domains {
+			if domain == d || strings.HasSuffix(domain, "."+d) {
+				return service, true
+			}
+		}
+	}
+	return "", false
+}
+
+// GetAvailableServices returns the list of services that can be blocked
+func GetAvailableServices() []string {
+	services := make([]string, 0, len(blockedServiceDomains))
+	for k := range blockedServiceDomains {
+		services = append(services, k)
+	}
+	return services
 }
 
 // GetStats returns filtering statistics

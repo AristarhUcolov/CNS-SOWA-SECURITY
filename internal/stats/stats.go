@@ -63,6 +63,8 @@ type QueryLog struct {
 	mu      sync.RWMutex
 	entries []QueryLogEntry
 	maxSize int
+	dataDir string
+	dirty   bool
 }
 
 var queryLog = &QueryLog{
@@ -85,8 +87,14 @@ func NewCollector(dataDir string) *Collector {
 		},
 	}
 
+	// Set dataDir on query log for persistence
+	queryLog.dataDir = dataDir
+
 	// Try to load existing stats
 	c.load()
+
+	// Load persisted query log
+	queryLog.loadFromDisk()
 
 	return c
 }
@@ -102,6 +110,7 @@ func (c *Collector) Start() {
 func (c *Collector) Stop() {
 	close(c.done)
 	c.save()
+	queryLog.saveToDisk()
 	log.Println("[Stats] Collector stopped")
 }
 
@@ -231,6 +240,7 @@ func (c *Collector) saveLoop() {
 		select {
 		case <-ticker.C:
 			c.save()
+			queryLog.saveToDisk()
 		case <-c.done:
 			return
 		}
@@ -341,6 +351,7 @@ func (ql *QueryLog) Add(entry QueryLogEntry) {
 	if len(ql.entries) > ql.maxSize {
 		ql.entries = ql.entries[len(ql.entries)-ql.maxSize:]
 	}
+	ql.dirty = true
 }
 
 // GetRecent returns the most recent entries
@@ -419,6 +430,71 @@ func (ql *QueryLog) Clear() {
 	ql.mu.Lock()
 	defer ql.mu.Unlock()
 	ql.entries = make([]QueryLogEntry, 0, 1000)
+	ql.dirty = true
+}
+
+// saveToDisk persists the query log to a JSON file
+func (ql *QueryLog) saveToDisk() {
+	ql.mu.RLock()
+	if !ql.dirty {
+		ql.mu.RUnlock()
+		return
+	}
+
+	// Save last 1000 entries to disk (keep file size reasonable)
+	saveCount := len(ql.entries)
+	if saveCount > 1000 {
+		saveCount = 1000
+	}
+	toSave := make([]QueryLogEntry, saveCount)
+	copy(toSave, ql.entries[len(ql.entries)-saveCount:])
+	ql.mu.RUnlock()
+
+	data, err := json.Marshal(toSave)
+	if err != nil {
+		log.Printf("[Stats] Error marshaling query log: %v", err)
+		return
+	}
+
+	path := filepath.Join(ql.dataDir, "config", "querylog.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		log.Printf("[Stats] Error creating querylog directory: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		log.Printf("[Stats] Error saving query log: %v", err)
+		return
+	}
+
+	ql.mu.Lock()
+	ql.dirty = false
+	ql.mu.Unlock()
+}
+
+// loadFromDisk loads the query log from disk
+func (ql *QueryLog) loadFromDisk() {
+	if ql.dataDir == "" {
+		return
+	}
+
+	path := filepath.Join(ql.dataDir, "config", "querylog.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return // No previous query log
+	}
+
+	var entries []QueryLogEntry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		log.Printf("[Stats] Error loading query log: %v", err)
+		return
+	}
+
+	ql.mu.Lock()
+	ql.entries = entries
+	ql.mu.Unlock()
+
+	log.Printf("[Stats] Loaded %d query log entries from disk", len(entries))
 }
 
 func copyMapInt64(src map[string]int64) map[string]int64 {

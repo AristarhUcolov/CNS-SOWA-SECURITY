@@ -32,6 +32,31 @@
     --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* Light Theme */
+[data-theme="light"] {
+    --bg-primary: #f0f2f5;
+    --bg-secondary: #e4e6eb;
+    --bg-card: #ffffff;
+    --bg-card-hover: #f7f8fa;
+    --bg-sidebar: #ffffff;
+    --bg-input: #f0f2f5;
+    --border-color: #d0d5dd;
+    --border-glow: #0088cc;
+    --text-primary: #1a1a2e;
+    --text-secondary: #555577;
+    --text-muted: #8888aa;
+    --accent-primary: #0088cc;
+    --accent-secondary: #6920cc;
+    --accent-gradient: linear-gradient(135deg, #0088cc, #6920cc);
+    --success: #00aa55;
+    --danger: #dd3355;
+    --warning: #cc8800;
+    --info: #0088cc;
+    --shadow-glow: 0 0 20px rgba(0, 136, 204, 0.1);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -1897,6 +1922,34 @@ h4 {
     .status-indicator span {
         display: none;
     }
+
+    .health-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .shortcuts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .session-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .theme-toggle {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .upstream-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .upstream-stats {
+        flex-wrap: wrap;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1910,6 +1963,15 @@ h4 {
 
     .page {
         padding: 16px;
+    }
+
+    .health-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        margin: 16px;
+        max-width: calc(100vw - 32px) !important;
     }
 }
 
@@ -1993,6 +2055,185 @@ h4 {
     background: rgba(255, 165, 0, 0.1);
     border: 1px solid rgba(255, 165, 0, 0.3);
     color: #ffa500;
+}
+
+/* ==================== Theme Toggle ==================== */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+    border-radius: 8px;
+    transition: var(--transition);
+    border: none;
+    background: none;
+    width: 100%;
+    font-family: inherit;
+}
+
+.theme-toggle:hover {
+    background: var(--bg-card);
+    color: var(--accent-primary);
+}
+
+.theme-toggle i {
+    width: 20px;
+    text-align: center;
+    font-size: 14px;
+}
+
+/* ==================== Keyboard Shortcuts Help ==================== */
+.kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: 'Consolas', monospace;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-muted);
+    box-shadow: 0 1px 0 var(--border-color);
+}
+
+.shortcuts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.shortcut-item span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+/* ==================== Sessions Page ==================== */
+.session-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: var(--transition);
+}
+
+.session-item:hover {
+    border-color: rgba(0, 212, 255, 0.3);
+    background: var(--bg-card-hover);
+}
+
+.session-item.current {
+    border-color: var(--success);
+    background: rgba(0, 255, 136, 0.03);
+}
+
+.session-info .session-ip {
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.session-info .session-agent {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.session-info .session-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ==================== Health / Upstream Stats ==================== */
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.health-item {
+    padding: 16px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    text-align: center;
+    transition: var(--transition);
+}
+
+.health-item:hover {
+    border-color: var(--accent-primary);
+}
+
+.health-item .health-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent-primary);
+    margin-bottom: 4px;
+}
+
+.health-item .health-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.upstream-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: var(--transition);
+}
+
+.upstream-item:hover {
+    border-color: var(--accent-primary);
+}
+
+.upstream-name {
+    font-family: 'Consolas', monospace;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.upstream-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.upstream-stats .latency {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.upstream-stats .errors {
+    color: var(--danger);
 }
 
 /* ==================== Stats grid 6 columns ==================== */

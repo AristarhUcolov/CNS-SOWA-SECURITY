@@ -301,6 +301,9 @@ function initApp() {
     appInitialized = true;
     initNavigation();
     initForms();
+    initTheme();
+    initKeyboardShortcuts();
+    initBackupRestore();
     loadDashboard();
     startAutoRefresh();
     loadConfig();
@@ -370,6 +373,8 @@ function loadPageData(page) {
         case 'guide': loadSetupGuide(); break;
         case 'blocked-services': loadBlockedServices(); break;
         case 'dns-rewrites': loadDNSRewrites(); break;
+        case 'sessions': loadSessions(); break;
+        case 'health': loadSystemHealth(); break;
     }
 }
 
@@ -1615,4 +1620,294 @@ function debounce(fn, delay) {
         clearTimeout(timer);
         timer = setTimeout(() => fn.apply(this, args), delay);
     };
+}
+
+// ==================== Theme Toggle ====================
+
+function initTheme() {
+    const saved = localStorage.getItem('sowa_theme') || 'dark';
+    applyTheme(saved);
+
+    document.getElementById('themeToggle')?.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
+        const next = current === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+        localStorage.setItem('sowa_theme', next);
+    });
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const icon = document.getElementById('themeIcon');
+    const label = document.getElementById('themeLabel');
+    if (icon) {
+        icon.className = theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+    }
+    if (label) {
+        label.textContent = theme === 'dark' ? 'Dark Mode' : 'Light Mode';
+    }
+}
+
+// ==================== Keyboard Shortcuts ====================
+
+function initKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Don't trigger shortcuts when typing in inputs
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+        const modal = document.getElementById('shortcutsModal');
+        switch (e.key.toLowerCase()) {
+            case 'd': navigateToPage('dashboard'); break;
+            case 'q': navigateToPage('querylog'); break;
+            case 's': navigateToPage('settings'); break;
+            case 'f': navigateToPage('filters'); break;
+            case 'h': navigateToPage('health'); break;
+            case 'g': navigateToPage('guide'); break;
+            case 'p':
+                e.preventDefault();
+                toggleProtection();
+                break;
+            case '?':
+                if (modal) modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+                break;
+            case 'escape':
+                if (modal) modal.style.display = 'none';
+                break;
+        }
+    });
+}
+
+function navigateToPage(page) {
+    const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+    if (navItem) navItem.click();
+}
+
+async function toggleProtection() {
+    try {
+        const resp = await apiFetch('/api/config');
+        if (!resp.ok) return;
+        const cfg = await resp.json();
+        cfg.filtering.enabled = !cfg.filtering.enabled;
+        const saveResp = await apiFetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cfg)
+        });
+        if (saveResp.ok) {
+            showNotification(cfg.filtering.enabled ? 'Protection enabled' : 'Protection disabled', 'success');
+            loadDashboard();
+        }
+    } catch (e) {
+        showNotification('Failed to toggle protection', 'error');
+    }
+}
+
+// ==================== Sessions Management ====================
+
+async function loadSessions() {
+    const container = document.getElementById('sessionsList');
+    if (!container) return;
+
+    try {
+        const resp = await apiFetch('/api/auth/sessions');
+        if (!resp.ok) throw new Error('Failed to load sessions');
+        const data = await resp.json();
+        const sessions = data.sessions || [];
+        const currentToken = authToken;
+
+        if (sessions.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-key"></i><p>No active sessions</p></div>';
+            return;
+        }
+
+        container.innerHTML = sessions.map(s => {
+            const isCurrent = s.token === currentToken;
+            const created = new Date(s.created).toLocaleString();
+            const lastUsed = new Date(s.last_used).toLocaleString();
+            return `
+                <div class="session-item${isCurrent ? ' current' : ''}">
+                    <div class="session-info">
+                        <div class="session-ip"><i class="fas fa-globe"></i> ${escapeHtml(s.ip || 'Unknown')}</div>
+                        <div class="session-agent"><i class="fas fa-desktop"></i> ${escapeHtml(s.user_agent || 'Unknown')}</div>
+                        <div class="session-time"><i class="fas fa-clock"></i> Created: ${created}</div>
+                        <div class="session-time"><i class="fas fa-history"></i> Last used: ${lastUsed}</div>
+                        ${isCurrent ? '<span class="badge badge-success">Current Session</span>' : ''}
+                    </div>
+                    ${!isCurrent ? `<button class="btn btn-danger btn-sm" onclick="revokeSession('${s.token}')"><i class="fas fa-times"></i> Revoke</button>` : ''}
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = '<div class="error-message">Failed to load sessions</div>';
+    }
+}
+
+async function revokeSession(token) {
+    try {
+        const resp = await apiFetch('/api/auth/sessions/revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        if (resp.ok) {
+            showNotification('Session revoked', 'success');
+            loadSessions();
+        } else {
+            showNotification('Failed to revoke session', 'error');
+        }
+    } catch (e) {
+        showNotification('Failed to revoke session', 'error');
+    }
+}
+
+// ==================== System Health ====================
+
+async function loadSystemHealth() {
+    loadHealthMetrics();
+    loadUpstreamStats();
+}
+
+async function loadHealthMetrics() {
+    const grid = document.getElementById('healthGrid');
+    if (!grid) return;
+
+    try {
+        const resp = await apiFetch('/api/health');
+        if (!resp.ok) throw new Error('Failed to load health');
+        const h = await resp.json();
+
+        const memMB = (h.memory_alloc / 1024 / 1024).toFixed(1);
+        const sysMB = (h.memory_sys / 1024 / 1024).toFixed(1);
+
+        grid.innerHTML = `
+            <div class="health-item">
+                <div class="health-value">${formatUptime(h.uptime_seconds || 0)}</div>
+                <div class="health-label">Uptime</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${memMB} MB</div>
+                <div class="health-label">Memory Used</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${sysMB} MB</div>
+                <div class="health-label">System Memory</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.goroutines || 0}</div>
+                <div class="health-label">Goroutines</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.go_version || 'N/A'}</div>
+                <div class="health-label">Go Version</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.os || ''} / ${h.arch || ''}</div>
+                <div class="health-label">Platform</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.dns_running ? '<span style="color:var(--accent-color)">Running</span>' : '<span style="color:var(--danger-color)">Stopped</span>'}</div>
+                <div class="health-label">DNS Server</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.dhcp_running ? '<span style="color:var(--accent-color)">Running</span>' : '<span style="color:var(--text-muted)">Disabled</span>'}</div>
+                <div class="health-label">DHCP Server</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">${h.auto_update_hrs || 0}h</div>
+                <div class="health-label">Auto-Update Interval</div>
+            </div>
+            <div class="health-item">
+                <div class="health-value">v${h.version || '?'}</div>
+                <div class="health-label">Version</div>
+            </div>
+        `;
+    } catch (e) {
+        grid.innerHTML = '<div class="error-message">Failed to load health metrics</div>';
+    }
+}
+
+async function loadUpstreamStats() {
+    const container = document.getElementById('upstreamStats');
+    if (!container) return;
+
+    try {
+        const resp = await apiFetch('/api/upstream/stats');
+        if (!resp.ok) throw new Error('Failed to load upstream stats');
+        const data = await resp.json();
+        const servers = data.servers || {};
+        const keys = Object.keys(servers);
+
+        if (keys.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-server"></i><p>No upstream data yet</p></div>';
+            return;
+        }
+
+        container.innerHTML = keys.map(name => {
+            const s = servers[name];
+            return `
+                <div class="upstream-item">
+                    <div class="upstream-name"><i class="fas fa-server"></i> ${escapeHtml(name)}</div>
+                    <div class="upstream-stats">
+                        <span class="latency"><i class="fas fa-tachometer-alt"></i> Avg: ${s.avg_ms.toFixed(1)}ms</span>
+                        <span class="latency"><i class="fas fa-clock"></i> Last: ${s.last_ms.toFixed(1)}ms</span>
+                        <span><i class="fas fa-exchange-alt"></i> ${s.count} queries</span>
+                        <span class="errors"><i class="fas fa-exclamation-triangle"></i> ${s.errors} errors</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = '<div class="error-message">Failed to load upstream stats</div>';
+    }
+}
+
+// ==================== Config Backup / Restore ====================
+
+function initBackupRestore() {
+    document.getElementById('btnBackupConfig')?.addEventListener('click', async () => {
+        try {
+            const resp = await apiFetch('/api/config/backup');
+            if (!resp.ok) throw new Error('Backup failed');
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sowa-config-backup-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showNotification('Configuration backup downloaded', 'success');
+        } catch (e) {
+            showNotification('Failed to download backup', 'error');
+        }
+    });
+
+    document.getElementById('restoreConfigFile')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!confirm('Are you sure you want to restore this configuration? This will overwrite your current settings.')) {
+            e.target.value = '';
+            return;
+        }
+
+        try {
+            const text = await file.text();
+            JSON.parse(text); // Validate JSON
+            const resp = await apiFetch('/api/config/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: text
+            });
+            if (resp.ok) {
+                showNotification('Configuration restored! Reload recommended.', 'success');
+                document.getElementById('backupStatus').innerHTML = '<span style="color:var(--accent-color)">Configuration restored successfully. Reload recommended.</span>';
+            } else {
+                throw new Error('Restore failed');
+            }
+        } catch (err) {
+            showNotification('Failed to restore configuration: ' + err.message, 'error');
+        }
+        e.target.value = '';
+    });
 }

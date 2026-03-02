@@ -89,15 +89,16 @@ type WebConfig struct {
 
 // FilteringConfig holds filtering-related settings
 type FilteringConfig struct {
-	Enabled         bool              `json:"enabled"`
-	SafeSearch      SafeSearchConfig  `json:"safe_search"`
-	ParentalControl bool              `json:"parental_control"`
-	SafeBrowsing    bool              `json:"safe_browsing"`
-	BlockLists      []BlockListConfig `json:"blocklists"`
-	WhiteLists      []WhiteListConfig `json:"whitelists"`
-	CustomRules     []string          `json:"custom_rules"`
-	BlockedServices []string          `json:"blocked_services"`
-	DNSRewrites     []DNSRewrite      `json:"dns_rewrites"`
+	Enabled            bool              `json:"enabled"`
+	SafeSearch         SafeSearchConfig  `json:"safe_search"`
+	ParentalControl    bool              `json:"parental_control"`
+	SafeBrowsing       bool              `json:"safe_browsing"`
+	BlockLists         []BlockListConfig `json:"blocklists"`
+	WhiteLists         []WhiteListConfig `json:"whitelists"`
+	CustomRules        []string          `json:"custom_rules"`
+	BlockedServices    []string          `json:"blocked_services"`
+	DNSRewrites        []DNSRewrite      `json:"dns_rewrites"`
+	AutoUpdateInterval int               `json:"auto_update_interval"` // hours, 0 = disabled
 }
 
 // DNSRewrite maps a domain to a custom IP address
@@ -227,13 +228,14 @@ func DefaultConfig() *Config {
 				StartPage:  true,
 				Brave:      true,
 			},
-			ParentalControl: false,
-			SafeBrowsing:    true,
-			BlockLists:      defaultBlockLists(),
-			WhiteLists:      []WhiteListConfig{},
-			CustomRules:     []string{},
-			BlockedServices: []string{},
-			DNSRewrites:     []DNSRewrite{},
+			ParentalControl:    false,
+			SafeBrowsing:       true,
+			BlockLists:         defaultBlockLists(),
+			WhiteLists:         []WhiteListConfig{},
+			CustomRules:        []string{},
+			BlockedServices:    []string{},
+			DNSRewrites:        []DNSRewrite{},
+			AutoUpdateInterval: 24, // update blocklists every 24 hours
 		},
 		DHCP: DHCPConfig{
 			Enabled:       false,

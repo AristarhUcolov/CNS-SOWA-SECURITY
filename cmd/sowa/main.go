@@ -24,7 +24,7 @@ import (
 
 const (
 	appName    = "S.O.W.A Security"
-	appVersion = "1.3.0"
+	appVersion = "1.4.0"
 	banner     = `
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
@@ -35,7 +35,7 @@ const (
 ║     ███████║╚██████╔╝╚███╔███╔╝██║  ██║                      ║
 ║     ╚══════╝ ╚═════╝  ╚══╝╚══╝ ╚═╝  ╚═╝                      ║
 ║                                                              ║
-║         S.O.W.A Security Software v1.3.0                     ║
+║         S.O.W.A Security Software v1.4.0                     ║
 ║         DNS Protection & Filtering                           ║
 ║         by C.N.S (Clear Net Sky)                             ║
 ║                                                              ║
@@ -223,6 +223,7 @@ func main() {
 	apiServer.Stop()
 	dnsServer.Stop()
 	dhcpServer.Stop()
+	filterEngine.Stop()
 	statsCollector.Stop()
 	cfg.Save()
 

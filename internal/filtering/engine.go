@@ -34,6 +34,7 @@ type Engine struct {
 	dataDir      string
 	lastUpdate   time.Time
 	totalRules   int
+	updateDone   chan struct{}
 }
 
 // BlockInfo stores info about why a domain is blocked
@@ -72,8 +73,48 @@ func (e *Engine) Start() error {
 	// Load custom rules
 	e.loadCustomRules()
 
+	// Start auto-update scheduler
+	e.startAutoUpdate()
+
 	log.Printf("[Filter] Engine started with %d blocked domains", e.totalRules)
 	return nil
+}
+
+// Stop stops the filtering engine and its background goroutines
+func (e *Engine) Stop() {
+	if e.updateDone != nil {
+		close(e.updateDone)
+	}
+}
+
+// startAutoUpdate launches the periodic blocklist refresh goroutine
+func (e *Engine) startAutoUpdate() {
+	interval := e.cfg.Filtering.AutoUpdateInterval
+	if interval <= 0 {
+		log.Println("[Filter] Auto-update disabled")
+		return
+	}
+
+	e.updateDone = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Duration(interval) * time.Hour)
+		defer ticker.Stop()
+		log.Printf("[Filter] Auto-update scheduler started (every %d hours)", interval)
+		for {
+			select {
+			case <-ticker.C:
+				log.Println("[Filter] Auto-update: refreshing blocklists...")
+				if err := e.Refresh(); err != nil {
+					log.Printf("[Filter] Auto-update error: %v", err)
+				} else {
+					log.Printf("[Filter] Auto-update completed: %d blocked domains", e.totalRules)
+				}
+			case <-e.updateDone:
+				log.Println("[Filter] Auto-update scheduler stopped")
+				return
+			}
+		}
+	}()
 }
 
 // Check verifies if a domain should be blocked

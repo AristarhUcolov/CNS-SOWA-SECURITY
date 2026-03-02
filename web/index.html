@@ -201,7 +201,7 @@
                     <i class="fas fa-shield-halved"></i>
                     <span class="logo-text">S.O.W.A</span>
                 </div>
-                <span class="version">v1.3.0</span>
+                <span class="version">v1.4.0</span>
             </div>
             
             <ul class="nav-menu">
@@ -244,12 +244,22 @@
                 <li class="nav-item" data-page="access">
                     <a href="#access"><i class="fas fa-user-shield"></i><span>Access Control</span></a>
                 </li>
+                <li class="nav-item" data-page="sessions">
+                    <a href="#sessions"><i class="fas fa-key"></i><span>Sessions</span></a>
+                </li>
+                <li class="nav-item" data-page="health">
+                    <a href="#health"><i class="fas fa-heartbeat"></i><span>System Health</span></a>
+                </li>
                 <li class="nav-item" data-page="guide">
                     <a href="#guide"><i class="fas fa-book"></i><span>Setup Guide</span></a>
                 </li>
             </ul>
             
             <div class="sidebar-footer">
+                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                    <i class="fas fa-moon" id="themeIcon"></i>
+                    <span id="themeLabel">Dark Mode</span>
+                </button>
                 <a href="https://aristarhucolov.github.io/C.N.S-Clear.Net.Sky-S.O.W.A/" target="_blank">
                     <i class="fas fa-globe"></i> C.N.S Website
                 </a>
@@ -845,6 +855,89 @@
                                 <i class="fas fa-save"></i> Save Access Settings
                             </button>
                         </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sessions Page -->
+            <div class="page" id="page-sessions">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-key"></i> Active Sessions</h3>
+                        <p class="card-subtitle">Manage your active login sessions</p>
+                    </div>
+                    <div class="card-body">
+                        <div id="sessionsList" class="sessions-list">
+                            <div class="loading-placeholder">Loading sessions...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health Page -->
+            <div class="page" id="page-health">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-heartbeat"></i> System Health</h3>
+                        <p class="card-subtitle">Runtime metrics and system status</p>
+                    </div>
+                    <div class="card-body">
+                        <div class="health-grid" id="healthGrid">
+                            <div class="loading-placeholder">Loading health data...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-server"></i> Upstream DNS Latency</h3>
+                        <p class="card-subtitle">Response time statistics per upstream server</p>
+                    </div>
+                    <div class="card-body">
+                        <div id="upstreamStats" class="upstream-stats">
+                            <div class="loading-placeholder">Loading upstream stats...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-database"></i> Configuration Backup</h3>
+                        <p class="card-subtitle">Export or restore your configuration</p>
+                    </div>
+                    <div class="card-body">
+                        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="btnBackupConfig">
+                                <i class="fas fa-download"></i> Download Backup
+                            </button>
+                            <label class="btn btn-secondary" style="cursor:pointer;">
+                                <i class="fas fa-upload"></i> Restore from File
+                                <input type="file" id="restoreConfigFile" accept=".json" style="display:none;">
+                            </label>
+                        </div>
+                        <div id="backupStatus" style="margin-top:12px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Keyboard Shortcuts Modal -->
+            <div id="shortcutsModal" class="modal" style="display:none;">
+                <div class="modal-content" style="max-width:420px;">
+                    <div class="modal-header">
+                        <h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>
+                        <button class="modal-close" onclick="document.getElementById('shortcutsModal').style.display='none'">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="shortcuts-grid">
+                            <div class="shortcut-item"><kbd class="kbd">D</kbd><span>Dashboard</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">Q</kbd><span>Query Log</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">S</kbd><span>Settings</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">F</kbd><span>Filtering</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">H</kbd><span>System Health</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">G</kbd><span>Setup Guide</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">P</kbd><span>Toggle Protection</span></div>
+                            <div class="shortcut-item"><kbd class="kbd">?</kbd><span>Show Shortcuts</span></div>
+                        </div>
                     </div>
                 </div>
             </div>

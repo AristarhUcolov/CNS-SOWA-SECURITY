@@ -213,6 +213,14 @@ func (c *DNSCache) Size() int {
 	return len(c.entries)
 }
 
+// GetUpstreamLatency returns upstream latency stats
+func (s *Server) GetUpstreamLatency() map[string]map[string]interface{} {
+	if s.upstream == nil {
+		return nil
+	}
+	return s.upstream.GetLatencyStats()
+}
+
 // New creates a new DNS server
 func New(cfg *config.Config, filterEngine *filtering.Engine, statsCollector *stats.Collector) *Server {
 	ctx, cancel := context.WithCancel(context.Background())

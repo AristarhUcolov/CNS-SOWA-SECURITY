@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -130,6 +131,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/querylog/export", s.handleQueryLogExport)
 	s.mux.HandleFunc("/api/stats/export", s.handleStatsExport)
 	s.mux.HandleFunc("/api/stats/reset", s.handleStatsReset)
+	s.mux.HandleFunc("/api/health", s.handleHealth)
+	s.mux.HandleFunc("/api/upstream/stats", s.handleUpstreamStats)
+	s.mux.HandleFunc("/api/config/backup", s.handleConfigBackup)
+	s.mux.HandleFunc("/api/config/restore", s.handleConfigRestore)
+	s.mux.HandleFunc("/api/auth/sessions/revoke", s.handleSessionRevoke)
 
 	// Static files (web UI)
 	s.mux.Handle("/", http.FileServer(http.Dir(s.webDir)))
@@ -506,7 +512,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"dns_running":  s.dns.IsRunning(),
 		"dhcp_running": s.dhcp.IsRunning(),
 		"protection":   s.cfg.Filtering.Enabled,
-		"version":      "1.3.0",
+		"version":      "1.4.0",
 		"cache_size":   s.dns.CacheSize(),
 		"dhcp_leases":  s.dhcp.GetLeaseCount(),
 		"uptime":       int64(uptime.Seconds()),
@@ -749,7 +755,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"version":  "1.3.0",
+		"version":  "1.4.0",
 		"dns_port": s.cfg.DNS.Port,
 		"web_port": s.cfg.Web.Port,
 		"ips":      ips,
@@ -874,6 +880,139 @@ func (s *Server) handleStatsReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.stats.Reset()
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// ==================== Health ====================
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	uptime := time.Since(s.startTime)
+
+	jsonResponse(w, map[string]interface{}{
+		"status":       "ok",
+		"uptime":       int64(uptime.Seconds()),
+		"uptime_human": formatDuration(uptime),
+		"start_time":   s.startTime.Format(time.RFC3339),
+		"version":      "1.4.0",
+		"go_version":   runtime.Version(),
+		"os":           runtime.GOOS,
+		"arch":         runtime.GOARCH,
+		"goroutines":   runtime.NumGoroutine(),
+		"memory": map[string]interface{}{
+			"alloc_mb":       float64(mem.Alloc) / 1024 / 1024,
+			"total_alloc_mb": float64(mem.TotalAlloc) / 1024 / 1024,
+			"sys_mb":         float64(mem.Sys) / 1024 / 1024,
+			"num_gc":         mem.NumGC,
+		},
+		"dns_running":     s.dns.IsRunning(),
+		"dhcp_running":    s.dhcp.IsRunning(),
+		"protection":      s.cfg.Filtering.Enabled,
+		"cache_size":      s.dns.CacheSize(),
+		"dns_port":        s.cfg.DNS.Port,
+		"web_port":        s.cfg.Web.Port,
+		"blocklist_count": len(s.cfg.Filtering.BlockLists),
+		"auto_update_hrs": s.cfg.Filtering.AutoUpdateInterval,
+	})
+}
+
+func formatDuration(d time.Duration) string {
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hours, minutes)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	return fmt.Sprintf("%dm", minutes)
+}
+
+// ==================== Upstream Stats ====================
+
+func (s *Server) handleUpstreamStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	jsonResponse(w, map[string]interface{}{
+		"upstreams": s.dns.GetUpstreamLatency(),
+	})
+}
+
+// ==================== Config Backup/Restore ====================
+
+func (s *Server) handleConfigBackup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Export config as JSON download
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", "attachment; filename=sowa-config-backup.json")
+	json.NewEncoder(w).Encode(s.cfg)
+}
+
+func (s *Server) handleConfigRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var incoming config.Config
+	if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+		http.Error(w, `{"error":"invalid JSON: `+err.Error()+`"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Apply the restored config (preserve current auth to prevent lockout)
+	currentAuth := s.cfg.Auth
+	s.cfg.Update(func(cfg *config.Config) {
+		cfg.DNS = incoming.DNS
+		cfg.Web = incoming.Web
+		cfg.Filtering = incoming.Filtering
+		cfg.DHCP = incoming.DHCP
+		cfg.Clients = incoming.Clients
+		cfg.Access = incoming.Access
+		// Restore auth only if provided, otherwise keep current
+		if incoming.Auth.PasswordHash != "" {
+			cfg.Auth = incoming.Auth
+		} else {
+			cfg.Auth = currentAuth
+		}
+	})
+
+	log.Println("[API] Configuration restored from backup")
+	jsonResponse(w, map[string]string{"status": "ok", "message": "Configuration restored. Restart recommended."})
+}
+
+// ==================== Session Management ====================
+
+func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" {
+		http.Error(w, `{"error":"token required"}`, http.StatusBadRequest)
+		return
+	}
+
+	s.auth.Logout(req.Token)
+	log.Printf("[API] Session revoked")
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
 

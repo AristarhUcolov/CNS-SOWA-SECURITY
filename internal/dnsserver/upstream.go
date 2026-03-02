@@ -23,6 +23,36 @@ type UpstreamResolver struct {
 	tlsClient  *dns.Client
 	httpClient *http.Client
 	mu         sync.RWMutex
+	latency    map[string]*UpstreamLatency
+}
+
+// UpstreamLatency tracks response time metrics for an upstream server
+type UpstreamLatency struct {
+	mu       sync.Mutex
+	TotalMs  float64   `json:"total_ms"`
+	Count    int64     `json:"count"`
+	Errors   int64     `json:"errors"`
+	AvgMs    float64   `json:"avg_ms"`
+	LastMs   float64   `json:"last_ms"`
+	LastUsed time.Time `json:"last_used"`
+}
+
+// RecordLatency records a response time for an upstream
+func (ul *UpstreamLatency) RecordLatency(ms float64, isError bool) {
+	ul.mu.Lock()
+	defer ul.mu.Unlock()
+	ul.Count++
+	ul.LastMs = ms
+	ul.LastUsed = time.Now()
+	if isError {
+		ul.Errors++
+		return
+	}
+	ul.TotalMs += ms
+	visible := ul.Count - ul.Errors
+	if visible > 0 {
+		ul.AvgMs = ul.TotalMs / float64(visible)
+	}
 }
 
 // bootstrapDialer creates a custom dialer that resolves hostnames using
@@ -125,6 +155,7 @@ func NewUpstreamResolver(cfg *config.Config) *UpstreamResolver {
 				ForceAttemptHTTP2:   true,
 			},
 		},
+		latency: make(map[string]*UpstreamLatency),
 	}
 }
 
@@ -138,7 +169,12 @@ func (u *UpstreamResolver) Resolve(req *dns.Msg) (*dns.Msg, error) {
 	var lastErr error
 
 	for _, upstream := range upstreams {
+		start := time.Now()
 		resp, err := u.resolveWithUpstream(req, upstream)
+		elapsed := float64(time.Since(start).Microseconds()) / 1000.0
+
+		u.trackLatency(upstream, elapsed, err != nil)
+
 		if err != nil {
 			lastErr = err
 			log.Printf("[Upstream] Error with %s: %v", upstream, err)
@@ -149,7 +185,12 @@ func (u *UpstreamResolver) Resolve(req *dns.Msg) (*dns.Msg, error) {
 
 	// Try fallback servers
 	for _, fallback := range u.cfg.DNS.FallbackServers {
+		start := time.Now()
 		resp, err := u.resolveWithUpstream(req, fallback)
+		elapsed := float64(time.Since(start).Microseconds()) / 1000.0
+
+		u.trackLatency(fallback, elapsed, err != nil)
+
 		if err != nil {
 			lastErr = err
 			continue
@@ -291,4 +332,36 @@ func (u *UpstreamResolver) resolveDNSCrypt(req *dns.Msg, _ string) (*dns.Msg, er
 		return u.resolvePlain(req, u.cfg.DNS.FallbackServers[0])
 	}
 	return nil, fmt.Errorf("DNSCrypt not implemented and no fallback available")
+}
+
+// trackLatency records latency for an upstream server
+func (u *UpstreamResolver) trackLatency(upstream string, ms float64, isError bool) {
+	u.mu.Lock()
+	ul, ok := u.latency[upstream]
+	if !ok {
+		ul = &UpstreamLatency{}
+		u.latency[upstream] = ul
+	}
+	u.mu.Unlock()
+	ul.RecordLatency(ms, isError)
+}
+
+// GetLatencyStats returns latency statistics for all upstreams
+func (u *UpstreamResolver) GetLatencyStats() map[string]map[string]interface{} {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	result := make(map[string]map[string]interface{})
+	for server, ul := range u.latency {
+		ul.mu.Lock()
+		result[server] = map[string]interface{}{
+			"avg_ms":    fmt.Sprintf("%.2f", ul.AvgMs),
+			"last_ms":   fmt.Sprintf("%.2f", ul.LastMs),
+			"count":     ul.Count,
+			"errors":    ul.Errors,
+			"last_used": ul.LastUsed.Format(time.RFC3339),
+		}
+		ul.mu.Unlock()
+	}
+	return result
 }

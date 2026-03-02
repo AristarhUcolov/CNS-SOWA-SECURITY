@@ -22,18 +22,20 @@ type Collector struct {
 
 // Statistics holds aggregated stats
 type Statistics struct {
-	TotalQueries      int64            `json:"total_queries"`
-	BlockedQueries    int64            `json:"blocked_queries"`
-	CachedQueries     int64            `json:"cached_queries"`
-	AverageTime       float64          `json:"average_time_ms"`
-	TopBlockedDomains map[string]int64 `json:"top_blocked_domains"`
-	TopQueriedDomains map[string]int64 `json:"top_queried_domains"`
-	TopClients        map[string]int64 `json:"top_clients"`
-	QueryTypes        map[string]int64 `json:"query_types"`
-	HourlyQueries     [24]int64        `json:"hourly_queries"`
-	HourlyBlocked     [24]int64        `json:"hourly_blocked"`
-	StartTime         time.Time        `json:"start_time"`
-	LastQuery         time.Time        `json:"last_query"`
+	TotalQueries       int64            `json:"total_queries"`
+	BlockedQueries     int64            `json:"blocked_queries"`
+	CachedQueries      int64            `json:"cached_queries"`
+	RateLimitedQueries int64            `json:"rate_limited_queries"`
+	AverageTime        float64          `json:"average_time_ms"`
+	TopBlockedDomains  map[string]int64 `json:"top_blocked_domains"`
+	TopQueriedDomains  map[string]int64 `json:"top_queried_domains"`
+	TopClients         map[string]int64 `json:"top_clients"`
+	QueryTypes         map[string]int64 `json:"query_types"`
+	HourlyQueries      [24]int64        `json:"hourly_queries"`
+	HourlyBlocked      [24]int64        `json:"hourly_blocked"`
+	StartTime          time.Time        `json:"start_time"`
+	LastQuery          time.Time        `json:"last_query"`
+	LastHourlyResetDay int              `json:"last_hourly_reset_day"`
 }
 
 // QueryRecord represents a single DNS query for recording
@@ -170,9 +172,20 @@ func (c *Collector) processRecord(record QueryRecord) {
 		c.stats.TopBlockedDomains[record.Domain]++
 	}
 
-	if record.Reason == "cached" {
+	if record.Reason == "cached" || record.Reason == "stale_cache" {
 		c.stats.CachedQueries++
 	}
+	if record.Reason == "rate_limited" {
+		c.stats.RateLimitedQueries++
+	}
+
+	// Reset hourly arrays at the start of a new day
+	day := record.Timestamp.YearDay()
+	if c.stats.LastHourlyResetDay != 0 && day != c.stats.LastHourlyResetDay {
+		c.stats.HourlyQueries = [24]int64{}
+		c.stats.HourlyBlocked = [24]int64{}
+	}
+	c.stats.LastHourlyResetDay = day
 
 	c.stats.TopQueriedDomains[record.Domain]++
 	c.stats.TopClients[record.ClientIP]++
@@ -495,6 +508,12 @@ func (ql *QueryLog) loadFromDisk() {
 	ql.mu.Unlock()
 
 	log.Printf("[Stats] Loaded %d query log entries from disk", len(entries))
+}
+
+// ClearQueryLog clears only the query log, without resetting stats
+func ClearQueryLog() {
+	queryLog.Clear()
+	queryLog.saveToDisk()
 }
 
 func copyMapInt64(src map[string]int64) map[string]int64 {

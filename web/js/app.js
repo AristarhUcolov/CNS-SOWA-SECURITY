@@ -436,6 +436,7 @@ async function loadDashboard() {
 
             animateNumber('totalQueries', data.total_queries || 0);
             animateNumber('blockedQueries', data.blocked_queries || 0);
+            animateNumber('cachedQueries', data.cached_queries || 0);
 
             const percentage = data.total_queries > 0
                 ? ((data.blocked_queries / data.total_queries) * 100).toFixed(1)
@@ -454,6 +455,8 @@ async function loadDashboard() {
 
             const uptimeEl = document.getElementById('serverUptime');
             if (uptimeEl) uptimeEl.textContent = formatUptime(status.uptime || 0);
+
+            animateNumber('filteringRules', status.filtering_rules || 0);
 
             // Update protection status indicator
             const indicator = document.getElementById('serverStatus');
@@ -623,14 +626,24 @@ function fillTopTable(tableId, dataMap) {
     }
 
     const isBlocked = tableId === 'topBlockedTable';
+    const isClients = tableId === 'topClientsTable';
     tbody.innerHTML = sorted.map(([key, val]) => {
-        const action = isBlocked
-            ? `<button class="btn btn-xs btn-success" onclick="quickAllowDomain('${escapeHtml(key)}')" title="Allow"><i class="fas fa-check"></i></button>`
-            : `<button class="btn btn-xs btn-danger" onclick="quickBlockDomain('${escapeHtml(key)}')" title="Block"><i class="fas fa-ban"></i></button>`;
+        let actionCell = '';
+        if (isClients) {
+            // No block/allow for client IPs — just show a test icon
+            actionCell = '';
+        } else if (isBlocked) {
+            actionCell = `<button class="btn btn-xs btn-success" onclick="quickAllowDomain('${escapeHtml(key)}')" title="Allow"><i class="fas fa-check"></i></button>`;
+        } else {
+            actionCell = `<button class="btn btn-xs btn-danger" onclick="quickBlockDomain('${escapeHtml(key)}')" title="Block"><i class="fas fa-ban"></i></button>`;
+        }
+        const nameCell = isClients
+            ? `<td><i class="fas fa-desktop" style="color:var(--accent-color);margin-right:6px;"></i>${escapeHtml(key)}</td>`
+            : `<td><span class="domain-link" onclick="testDomain('${escapeHtml(key)}')" title="Test this domain">${escapeHtml(key)}</span></td>`;
         return `<tr>
-            <td><span class="domain-link" onclick="testDomain('${escapeHtml(key)}')" title="Test this domain">${escapeHtml(key)}</span></td>
+            ${nameCell}
             <td>${formatNumber(val)}</td>
-            <td>${action}</td>
+            <td>${actionCell}</td>
         </tr>`;
     }).join('');
 }
@@ -912,6 +925,7 @@ function initForms() {
     document.getElementById('exportQueryLog')?.addEventListener('click', () => {
         window.open(`${API_BASE}/api/querylog/export?format=csv`, '_blank');
     });
+    document.getElementById('clearQueryLog')?.addEventListener('click', clearQueryLog);
 
     // Add client
     document.getElementById('addClient')?.addEventListener('click', showAddClientModal);
@@ -1158,6 +1172,20 @@ async function loadQueryLog() {
 }
 
 // ==================== Modals ====================
+
+async function clearQueryLog() {
+    if (!confirm('Are you sure you want to clear the entire query log? This cannot be undone.')) return;
+    try {
+        const resp = await apiFetch('/api/querylog/clear', { method: 'POST' });
+        if (resp.ok) {
+            showToast('Query log cleared', 'success');
+            qlCurrentPage = 0;
+            loadQueryLog();
+        } else showToast('Failed to clear query log', 'error');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error clearing query log', 'error');
+    }
+}
 
 function showAddBlocklistModal() {
     showModal('Add Blocklist', `

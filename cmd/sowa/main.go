@@ -24,7 +24,7 @@ import (
 
 const (
 	appName    = "S.O.W.A Security"
-	appVersion = "1.4.2"
+	appVersion = "1.4.3"
 	banner     = `
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
@@ -35,7 +35,7 @@ const (
 ║     ███████║╚██████╔╝╚███╔███╔╝██║  ██║                      ║
 ║     ╚══════╝ ╚═════╝  ╚══╝╚══╝ ╚═╝  ╚═╝                      ║
 ║                                                              ║
-║         S.O.W.A Security Software v1.4.2                     ║
+║         S.O.W.A Security Software v1.4.3                     ║
 ║         DNS Protection & Filtering                           ║
 ║         by C.N.S (Clear Net Sky)                             ║
 ║                                                              ║

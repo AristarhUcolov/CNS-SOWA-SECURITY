@@ -131,6 +131,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/querylog/export", s.handleQueryLogExport)
 	s.mux.HandleFunc("/api/stats/export", s.handleStatsExport)
 	s.mux.HandleFunc("/api/stats/reset", s.handleStatsReset)
+	s.mux.HandleFunc("/api/querylog/clear", s.handleQueryLogClear)
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/upstream/stats", s.handleUpstreamStats)
 	s.mux.HandleFunc("/api/config/backup", s.handleConfigBackup)
@@ -521,15 +522,21 @@ func (s *Server) handleCacheClear(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	uptime := time.Since(s.startTime)
+
+	// Get filtering stats for rules count
+	filterStats := s.filter.GetStats()
+	totalRules, _ := filterStats["total_rules"].(int)
+
 	jsonResponse(w, map[string]interface{}{
-		"dns_running":  s.dns.IsRunning(),
-		"dhcp_running": s.dhcp.IsRunning(),
-		"protection":   s.cfg.Filtering.Enabled,
-		"version":      "1.4.2",
-		"cache_size":   s.dns.CacheSize(),
-		"dhcp_leases":  s.dhcp.GetLeaseCount(),
-		"uptime":       int64(uptime.Seconds()),
-		"start_time":   s.startTime.Format(time.RFC3339),
+		"dns_running":     s.dns.IsRunning(),
+		"dhcp_running":    s.dhcp.IsRunning(),
+		"protection":      s.cfg.Filtering.Enabled,
+		"version":         "1.4.3",
+		"cache_size":      s.dns.CacheSize(),
+		"dhcp_leases":     s.dhcp.GetLeaseCount(),
+		"uptime":          int64(uptime.Seconds()),
+		"start_time":      s.startTime.Format(time.RFC3339),
+		"filtering_rules": totalRules,
 	})
 }
 
@@ -768,7 +775,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"version":  "1.4.2",
+		"version":  "1.4.3",
 		"dns_port": s.cfg.DNS.Port,
 		"web_port": s.cfg.Web.Port,
 		"ips":      ips,
@@ -896,6 +903,16 @@ func (s *Server) handleStatsReset(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleQueryLogClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	stats.ClearQueryLog()
+	log.Println("[API] Query log cleared")
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
 // ==================== Health ====================
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -914,7 +931,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"uptime":       int64(uptime.Seconds()),
 		"uptime_human": formatDuration(uptime),
 		"start_time":   s.startTime.Format(time.RFC3339),
-		"version":      "1.4.2",
+		"version":      "1.4.3",
 		"go_version":   runtime.Version(),
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,

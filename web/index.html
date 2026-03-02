@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S.O.W.A Security - DNS Protection</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen" style="display:none;">
+        <div class="login-container">
+            <div class="login-logo">
+                <i class="fas fa-shield-halved"></i>
+                <h1>S.O.W.A Security</h1>
+                <p>DNS Protection & Filtering</p>
+            </div>
+            <!-- Setup Form (first-time) -->
+            <form class="login-form" id="setupForm" style="display:none;">
+                <h3>Initial Setup</h3>
+                <p class="hint">Create your admin account to protect the dashboard.</p>
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Username</label>
+                    <input type="text" id="setupUsername" value="admin" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-lock"></i> Password</label>
+                    <input type="password" id="setupPassword" placeholder="Enter password" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-lock"></i> Confirm Password</label>
+                    <input type="password" id="setupPasswordConfirm" placeholder="Confirm password" autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">
+                    <i class="fas fa-check"></i> Create Account
+                </button>
+            </form>
+            <!-- Login Form -->
+            <form class="login-form" id="loginForm" style="display:none;">
+                <div class="form-group">
+                    <label><i class="fas fa-user"></i> Username</label>
+                    <input type="text" id="loginUsername" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-lock"></i> Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password">
+                </div>
+                <div class="login-error" id="loginError"></div>
+                <button type="submit" class="btn btn-primary btn-full">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+            </form>
+            <div class="login-footer">
+                <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY" target="_blank">
+                    <i class="fab fa-github"></i> C.N.S Clear Net Sky
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Container -->
+    <div class="app-container" id="appContainer">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-shield-halved"></i>
+                    <span class="logo-text">S.O.W.A</span>
+                </div>
+                <span class="version">v1.0.0</span>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item active" data-page="dashboard">
+                    <a href="#dashboard"><i class="fas fa-chart-line"></i><span>Dashboard</span></a>
+                </li>
+                <li class="nav-item" data-page="settings">
+                    <a href="#settings"><i class="fas fa-cog"></i><span>General Settings</span></a>
+                </li>
+                <li class="nav-item" data-page="filters">
+                    <a href="#filters"><i class="fas fa-filter"></i><span>Filters</span></a>
+                </li>
+                <li class="nav-item" data-page="blocklists">
+                    <a href="#blocklists"><i class="fas fa-list"></i><span>Blocklists</span></a>
+                </li>
+                <li class="nav-item" data-page="safesearch">
+                    <a href="#safesearch"><i class="fas fa-search"></i><span>Safe Search</span></a>
+                </li>
+                <li class="nav-item" data-page="clients">
+                    <a href="#clients"><i class="fas fa-laptop"></i><span>Clients</span></a>
+                </li>
+                <li class="nav-item" data-page="dhcp">
+                    <a href="#dhcp"><i class="fas fa-network-wired"></i><span>DHCP</span></a>
+                </li>
+                <li class="nav-item" data-page="dns">
+                    <a href="#dns"><i class="fas fa-server"></i><span>DNS Settings</span></a>
+                </li>
+                <li class="nav-item" data-page="encryption">
+                    <a href="#encryption"><i class="fas fa-lock"></i><span>Encryption</span></a>
+                </li>
+                <li class="nav-item" data-page="querylog">
+                    <a href="#querylog"><i class="fas fa-clipboard-list"></i><span>Query Log</span></a>
+                </li>
+                <li class="nav-item" data-page="access">
+                    <a href="#access"><i class="fas fa-user-shield"></i><span>Access Control</span></a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer">
+                <a href="https://aristarhucolov.github.io/C.N.S-Clear.Net.Sky-S.O.W.A/" target="_blank">
+                    <i class="fas fa-globe"></i> C.N.S Website
+                </a>
+                <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY" target="_blank">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+                <a href="#" id="logoutBtn" class="logout-link">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <button class="menu-toggle" id="menuToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <div class="topbar-title">
+                    <h1 id="pageTitle">Dashboard</h1>
+                </div>
+                <div class="topbar-actions">
+                    <div class="domain-test-mini">
+                        <input type="text" id="quickTestDomain" placeholder="Test domain..." class="input-mini">
+                        <button class="btn btn-sm" id="quickTestBtn" title="Test domain"><i class="fas fa-vial"></i></button>
+                    </div>
+                    <div class="status-indicator" id="serverStatus">
+                        <span class="status-dot online"></span>
+                        <span>Protection Active</span>
+                    </div>
+                    <button class="btn btn-sm" id="toggleProtection" title="Toggle Protection">
+                        <i class="fas fa-power-off"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard Page -->
+            <div class="page active" id="page-dashboard">
+                <div class="stats-grid">
+                    <div class="stat-card" data-animate="fadeInUp" style="--delay: 0s">
+                        <div class="stat-icon queries"><i class="fas fa-globe"></i></div>
+                        <div class="stat-info">
+                            <h3 id="totalQueries">0</h3>
+                            <p>Total Queries</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" data-animate="fadeInUp" style="--delay: 0.1s">
+                        <div class="stat-icon blocked"><i class="fas fa-ban"></i></div>
+                        <div class="stat-info">
+                            <h3 id="blockedQueries">0</h3>
+                            <p>Blocked</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" data-animate="fadeInUp" style="--delay: 0.2s">
+                        <div class="stat-icon percentage"><i class="fas fa-percent"></i></div>
+                        <div class="stat-info">
+                            <h3 id="blockedPercentage">0%</h3>
+                            <p>Blocked %</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" data-animate="fadeInUp" style="--delay: 0.3s">
+                        <div class="stat-icon speed"><i class="fas fa-bolt"></i></div>
+                        <div class="stat-info">
+                            <h3 id="avgResponseTime">0ms</h3>
+                            <p>Avg Response</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="card" data-animate="fadeIn">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-area"></i> Queries Over Time (24h)</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="queriesChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" data-animate="fadeIn">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-doughnut"></i> Query Types</h3>
+                        </div>
+                        <div class="card-body chart-small">
+                            <canvas id="queryTypesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tables-grid">
+                    <div class="card" data-animate="fadeIn">
+                        <div class="card-header">
+                            <h3><i class="fas fa-fire"></i> Top Queried Domains</h3>
+                        </div>
+                        <div class="card-body">
+                            <table class="data-table" id="topQueriedTable">
+                                <thead><tr><th>Domain</th><th>Count</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card" data-animate="fadeIn">
+                        <div class="card-header">
+                            <h3><i class="fas fa-shield-halved"></i> Top Blocked Domains</h3>
+                        </div>
+                        <div class="card-body">
+                            <table class="data-table" id="topBlockedTable">
+                                <thead><tr><th>Domain</th><th>Count</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card" data-animate="fadeIn">
+                        <div class="card-header">
+                            <h3><i class="fas fa-users"></i> Top Clients</h3>
+                        </div>
+                        <div class="card-body">
+                            <table class="data-table" id="topClientsTable">
+                                <thead><tr><th>Client</th><th>Queries</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- General Settings Page -->
+            <div class="page" id="page-settings">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-cog"></i> General Settings</h3></div>
+                    <div class="card-body">
+                        <form id="generalSettingsForm">
+                            <div class="form-group">
+                                <label>Filtering Enabled</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="filteringEnabled" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>Safe Browsing (Phishing & Malware)</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="safeBrowsing" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>Parental Control</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="parentalControl">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-key"></i> Change Password</h3></div>
+                    <div class="card-body">
+                        <form id="changePasswordForm">
+                            <div class="form-group">
+                                <label>Current Password</label>
+                                <input type="password" id="currentPassword" autocomplete="current-password">
+                            </div>
+                            <div class="form-group">
+                                <label>New Password</label>
+                                <input type="password" id="newPassword" autocomplete="new-password">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-key"></i> Change Password
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters / Custom Rules Page -->
+            <div class="page" id="page-filters">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-filter"></i> Custom Filtering Rules</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="hint">Add custom rules to block or allow specific domains. Use <code>||domain.com^</code> to block, <code>@@||domain.com^</code> to allow.</p>
+                        <div class="form-group">
+                            <textarea id="customRules" rows="10" placeholder="||example.com^&#10;@@||allowed.com^&#10;# This is a comment"></textarea>
+                        </div>
+                        <button class="btn btn-primary" id="saveCustomRules">
+                            <i class="fas fa-save"></i> Save Rules
+                        </button>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-vial"></i> Test Domain</h3></div>
+                    <div class="card-body">
+                        <div class="form-inline">
+                            <input type="text" id="testDomainInput" placeholder="Enter domain to test..." class="flex-input">
+                            <button class="btn btn-primary" id="testDomainBtn"><i class="fas fa-search"></i> Test</button>
+                        </div>
+                        <div id="testDomainResult" class="test-result" style="display:none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blocklists Page -->
+            <div class="page" id="page-blocklists">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-list"></i> DNS Blocklists</h3>
+                        <button class="btn btn-sm btn-primary" id="addBlocklist">
+                            <i class="fas fa-plus"></i> Add Blocklist
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="filter-stats" id="filterStats"></div>
+                        <div id="blocklistsList"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-check-circle"></i> Whitelists</h3>
+                        <button class="btn btn-sm btn-primary" id="addWhitelist">
+                            <i class="fas fa-plus"></i> Add Whitelist
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="whitelistsList"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-sync-alt"></i> Update Lists</h3>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-primary" id="refreshLists">
+                            <i class="fas fa-download"></i> Update All Lists Now
+                        </button>
+                        <span id="lastUpdate" class="hint"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Safe Search Page -->
+            <div class="page" id="page-safesearch">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-search"></i> Safe Search Settings</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Enable Safe Search</label>
+                            <label class="switch">
+                                <input type="checkbox" id="safeSearchEnabled" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <hr>
+                        <h4>Search Engines</h4>
+                        <div class="safe-search-grid">
+                            <div class="safe-search-item"><i class="fab fa-google"></i><span>Google</span><label class="switch"><input type="checkbox" id="ssGoogle" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fab fa-microsoft"></i><span>Bing</span><label class="switch"><input type="checkbox" id="ssBing" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fab fa-yahoo"></i><span>Yahoo</span><label class="switch"><input type="checkbox" id="ssYahoo" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fab fa-yandex-international"></i><span>Yandex</span><label class="switch"><input type="checkbox" id="ssYandex" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fas fa-duck"></i><span>DuckDuckGo</span><label class="switch"><input type="checkbox" id="ssDuckDuckGo" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fab fa-youtube"></i><span>YouTube</span><label class="switch"><input type="checkbox" id="ssYouTube" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fas fa-leaf"></i><span>Ecosia</span><label class="switch"><input type="checkbox" id="ssEcosia" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fas fa-search"></i><span>StartPage</span><label class="switch"><input type="checkbox" id="ssStartPage" checked><span class="slider"></span></label></div>
+                            <div class="safe-search-item"><i class="fas fa-compass"></i><span>Brave</span><label class="switch"><input type="checkbox" id="ssBrave" checked><span class="slider"></span></label></div>
+                        </div>
+                        <br>
+                        <button class="btn btn-primary" id="saveSafeSearch">
+                            <i class="fas fa-save"></i> Save Safe Search Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clients Page -->
+            <div class="page" id="page-clients">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-laptop"></i> Client Devices</h3>
+                        <button class="btn btn-sm btn-primary" id="addClient">
+                            <i class="fas fa-plus"></i> Add Client
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="clientsList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DHCP Page -->
+            <div class="page" id="page-dhcp">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-network-wired"></i> DHCP Server</h3></div>
+                    <div class="card-body">
+                        <form id="dhcpForm">
+                            <div class="form-group">
+                                <label>Enable DHCP Server</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="dhcpEnabled">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label>Interface Name</label>
+                                <input type="text" id="dhcpInterface" placeholder="Ethernet">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Gateway IP</label>
+                                    <input type="text" id="dhcpGateway" placeholder="192.168.1.1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Subnet Mask</label>
+                                    <input type="text" id="dhcpSubnet" value="255.255.255.0">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Range Start</label>
+                                    <input type="text" id="dhcpRangeStart" placeholder="192.168.1.100">
+                                </div>
+                                <div class="form-group">
+                                    <label>Range End</label>
+                                    <input type="text" id="dhcpRangeEnd" placeholder="192.168.1.200">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Lease Duration (seconds)</label>
+                                <input type="number" id="dhcpLease" value="86400">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save DHCP Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-list-alt"></i> DHCP Leases</h3></div>
+                    <div class="card-body">
+                        <table class="data-table" id="dhcpLeasesTable">
+                            <thead><tr><th>MAC</th><th>IP</th><th>Hostname</th><th>Static</th><th>Expires</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- DNS Settings Page -->
+            <div class="page" id="page-dns">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-server"></i> DNS Server Settings</h3></div>
+                    <div class="card-body">
+                        <form id="dnsSettingsForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Listen Address</label>
+                                    <input type="text" id="dnsBindHost" value="0.0.0.0">
+                                </div>
+                                <div class="form-group">
+                                    <label>Port</label>
+                                    <input type="number" id="dnsPort" value="53">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Enable IPv6</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="enableIPv6" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <h4>Upstream DNS Servers</h4>
+                            <div class="form-group">
+                                <textarea id="upstreamServers" rows="5" placeholder="https://dns.cloudflare.com/dns-query&#10;tls://1.1.1.1&#10;8.8.8.8"></textarea>
+                            </div>
+                            <h4>Bootstrap DNS Servers</h4>
+                            <div class="form-group">
+                                <textarea id="bootstrapDns" rows="3" placeholder="1.1.1.1&#10;8.8.8.8&#10;9.9.9.9"></textarea>
+                            </div>
+                            <h4>Cache Settings</h4>
+                            <div class="form-group">
+                                <label>Enable Cache</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="cacheEnabled" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Cache Size</label>
+                                    <input type="number" id="cacheSize" value="10000">
+                                </div>
+                                <div class="form-group">
+                                    <label>Min TTL (s)</label>
+                                    <input type="number" id="cacheTTLMin" value="60">
+                                </div>
+                                <div class="form-group">
+                                    <label>Max TTL (s)</label>
+                                    <input type="number" id="cacheTTLMax" value="86400">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Rate Limit (0 = disabled)</label>
+                                <input type="number" id="rateLimit" value="0">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save DNS Settings
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="clearCache">
+                                <i class="fas fa-broom"></i> Clear DNS Cache
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Encryption Page -->
+            <div class="page" id="page-encryption">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-lock"></i> Encryption Settings</h3></div>
+                    <div class="card-body">
+                        <form id="encryptionForm">
+                            <h4>DNS-over-HTTPS (DoH) Server</h4>
+                            <p class="hint">Accept incoming encrypted DNS queries via HTTPS. Clients can connect to <code>https://your-server/dns-query</code></p>
+                            <div class="form-group">
+                                <label>Enable DoH Server</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="dohEnabled">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>DoH Port</label>
+                                    <input type="number" id="dohPort" value="443">
+                                </div>
+                            </div>
+
+                            <h4>DNS-over-TLS (DoT) Server</h4>
+                            <p class="hint">Accept incoming encrypted DNS queries via TLS on port 853.</p>
+                            <div class="form-group">
+                                <label>Enable DoT Server</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="dotEnabled">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>DoT Port</label>
+                                    <input type="number" id="dotPort" value="853">
+                                </div>
+                            </div>
+
+                            <h4>TLS Certificates</h4>
+                            <div class="form-group">
+                                <label>Certificate File Path</label>
+                                <input type="text" id="tlsCert" placeholder="/path/to/cert.pem">
+                            </div>
+                            <div class="form-group">
+                                <label>Private Key File Path</label>
+                                <input type="text" id="tlsKey" placeholder="/path/to/key.pem">
+                            </div>
+
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Encryption Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Query Log Page -->
+            <div class="page" id="page-querylog">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-clipboard-list"></i> Query Log</h3>
+                        <div class="header-actions">
+                            <select id="queryLogFilter">
+                                <option value="all">All Queries</option>
+                                <option value="blocked">Blocked Only</option>
+                                <option value="allowed">Allowed Only</option>
+                            </select>
+                            <button class="btn btn-sm" id="refreshQueryLog">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <table class="data-table" id="queryLogTable">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Domain</th>
+                                    <th>Type</th>
+                                    <th>Client</th>
+                                    <th>Status</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Access Control Page -->
+            <div class="page" id="page-access">
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-user-shield"></i> Access Control</h3></div>
+                    <div class="card-body">
+                        <form id="accessForm">
+                            <div class="form-group">
+                                <label>Allowed Clients (one per line, IPs or CIDRs)</label>
+                                <textarea id="allowedClients" rows="5" placeholder="Leave empty to allow all"></textarea>
+                                <p class="hint">If set, only these clients can use the DNS server</p>
+                            </div>
+                            <div class="form-group">
+                                <label>Disallowed Clients (one per line)</label>
+                                <textarea id="disallowedClients" rows="5" placeholder="192.168.1.100&#10;10.0.0.0/24"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Blocked Hosts (one per line)</label>
+                                <textarea id="blockedHosts" rows="5" placeholder="example.com"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Access Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Add Blocklist</h3>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

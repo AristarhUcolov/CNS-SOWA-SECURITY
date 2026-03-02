@@ -1,0 +1,29 @@
+# Build output
+/build/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (runtime)
+/data/config/config.json
+/data/config/stats.json
+/data/blacklist/*.txt
+/data/whitelist/*.txt

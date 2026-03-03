@@ -638,9 +638,28 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // ==================== Auth Handlers ====================
 
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	authenticated := false
+
+	// Check if the request carries a valid session token
+	token := ""
+	if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+		token = strings.TrimPrefix(authHeader, "Bearer ")
+	}
+	if token == "" {
+		if cookie, err := r.Cookie("sowa_session"); err == nil {
+			token = cookie.Value
+		}
+	}
+	if token != "" {
+		if _, valid := s.auth.ValidateToken(token); valid {
+			authenticated = true
+		}
+	}
+
 	jsonResponse(w, map[string]interface{}{
-		"configured": s.auth.IsConfigured(),
-		"username":   s.cfg.Auth.Username,
+		"configured":    s.auth.IsConfigured(),
+		"authenticated": authenticated,
+		"username":      s.cfg.Auth.Username,
 	})
 }
 

@@ -267,6 +267,11 @@ async function logout() {
         clearInterval(statsRefreshInterval);
         statsRefreshInterval = null;
     }
+    if (qlRefreshInterval) {
+        clearInterval(qlRefreshInterval);
+        qlRefreshInterval = null;
+    }
+    currentPage = 'dashboard';
 }
 
 // Wrapper for authenticated API calls
@@ -297,7 +302,10 @@ let appInitialized = false;
 
 function initApp() {
     if (appInitialized) {
+        // Re-login after logout: reload dashboard and restart auto-refresh
         loadDashboard();
+        startAutoRefresh();
+        loadConfig();
         return;
     }
     appInitialized = true;

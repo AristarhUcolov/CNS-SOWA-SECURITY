@@ -328,7 +328,8 @@ func (c *Collector) GetStats() Statistics {
 	return s
 }
 
-// Reset clears all statistics
+// Reset clears all statistics (counters, charts, top tables)
+// Does NOT clear the query log — use ClearQueryLog() for that
 func (c *Collector) Reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -341,7 +342,6 @@ func (c *Collector) Reset() {
 		StartTime:         time.Now(),
 	}
 
-	queryLog.Clear()
 	c.save()
 }
 

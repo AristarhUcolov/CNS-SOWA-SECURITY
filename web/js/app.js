@@ -968,7 +968,7 @@ function initForms() {
 
     // Dashboard stats reset
     document.getElementById('resetStats')?.addEventListener('click', async () => {
-        if (!confirm('Reset all dashboard statistics? This cannot be undone.')) return;
+        if (!confirm('Reset all dashboard statistics (counters, charts, top tables)?\nQuery Log will NOT be affected.')) return;
         try {
             const resp = await apiFetch('/api/stats/reset', { method: 'POST' });
             if (resp.ok) {

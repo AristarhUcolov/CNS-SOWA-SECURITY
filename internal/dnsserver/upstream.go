@@ -201,6 +201,11 @@ func (u *UpstreamResolver) Resolve(req *dns.Msg) (*dns.Msg, error) {
 	return nil, fmt.Errorf("all upstream servers failed, last error: %w", lastErr)
 }
 
+// ResolveWith is a public wrapper for resolveWithUpstream for testing purposes
+func (u *UpstreamResolver) ResolveWith(upstream string, req *dns.Msg) (*dns.Msg, error) {
+	return u.resolveWithUpstream(req, upstream)
+}
+
 // resolveWithUpstream forwards to a specific upstream server
 func (u *UpstreamResolver) resolveWithUpstream(req *dns.Msg, upstream string) (*dns.Msg, error) {
 	switch {
@@ -355,8 +360,8 @@ func (u *UpstreamResolver) GetLatencyStats() map[string]map[string]interface{} {
 	for server, ul := range u.latency {
 		ul.mu.Lock()
 		result[server] = map[string]interface{}{
-			"avg_ms":    fmt.Sprintf("%.2f", ul.AvgMs),
-			"last_ms":   fmt.Sprintf("%.2f", ul.LastMs),
+			"avg_ms":    ul.AvgMs,
+			"last_ms":   ul.LastMs,
 			"count":     ul.Count,
 			"errors":    ul.Errors,
 			"last_used": ul.LastUsed.Format(time.RFC3339),

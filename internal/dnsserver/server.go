@@ -415,6 +415,14 @@ func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 		}
 	}
 
+	// Check DNS Rewrites BEFORE cache (rewrites should always take priority)
+	if rewrite := s.findDNSRewrite(domain); rewrite != nil {
+		log.Printf("[DNS] DNS Rewrite: %s -> %s", domain, rewrite.Answer)
+		s.writeDNSRewriteResponse(w, r, rewrite)
+		s.stats.RecordQuery(domain, qType, clientIP, false, "rewrite", time.Since(startTime))
+		return
+	}
+
 	// Check cache
 	if s.cfg.DNS.CacheEnabled {
 		cacheKey := fmt.Sprintf("%s_%d_%d", question.Name, question.Qtype, question.Qclass)
@@ -426,14 +434,6 @@ func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 			s.stats.RecordQuery(domain, qType, clientIP, false, "cached", time.Since(startTime))
 			return
 		}
-	}
-
-	// Check DNS Rewrites (custom domain → IP mappings)
-	if rewrite := s.findDNSRewrite(domain); rewrite != nil {
-		log.Printf("[DNS] DNS Rewrite: %s -> %s", domain, rewrite.Answer)
-		s.writeDNSRewriteResponse(w, r, rewrite)
-		s.stats.RecordQuery(domain, qType, clientIP, false, "rewrite", time.Since(startTime))
-		return
 	}
 
 	// Forward to upstream
@@ -709,4 +709,9 @@ func (s *Server) IsRunning() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.running
+}
+
+// TestUpstream tests a specific upstream server with a DNS query
+func (s *Server) TestUpstream(upstream string, req *dns.Msg) (*dns.Msg, error) {
+	return s.upstream.ResolveWith(upstream, req)
 }

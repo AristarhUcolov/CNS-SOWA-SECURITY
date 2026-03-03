@@ -523,9 +523,9 @@ func isValidDomain(domain string) bool {
 	if !strings.Contains(domain, ".") {
 		return false
 	}
-	// Basic character check
+	// Basic character check (allow * for wildcards)
 	for _, c := range domain {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_') {
+		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_' || c == '*') {
 			return false
 		}
 	}
@@ -555,21 +555,55 @@ func (e *Engine) isWhitelisted(domain string) bool {
 
 // checkCustomRules checks domain against custom user rules
 func (e *Engine) checkCustomRules(domain string) (string, bool) {
+	// First pass: check allow rules (@@)
 	for _, rule := range e.cfg.Filtering.CustomRules {
 		rule = strings.TrimSpace(rule)
 		if rule == "" || strings.HasPrefix(rule, "#") {
 			continue
 		}
+		if !strings.HasPrefix(rule, "@@") {
+			continue
+		}
 
-		// Allow rules start with @@
-		if strings.HasPrefix(rule, "@@") {
+		allowStr := strings.TrimPrefix(rule, "@@")
+		allowStr = strings.TrimPrefix(allowStr, "||")
+		allowStr = strings.TrimSuffix(allowStr, "^")
+		allowStr = strings.TrimSuffix(allowStr, "$important")
+		allowStr = strings.Split(allowStr, "$")[0]
+		allowStr = strings.ToLower(allowStr)
+
+		if strings.HasPrefix(allowStr, "*.") {
+			baseDomain := strings.TrimPrefix(allowStr, "*.")
+			if domain == baseDomain || strings.HasSuffix(domain, "."+baseDomain) {
+				return "", false // Explicitly allowed
+			}
+		} else if domain == allowStr || strings.HasSuffix(domain, "."+allowStr) {
+			return "", false // Explicitly allowed
+		}
+	}
+
+	// Second pass: check block rules
+	for _, rule := range e.cfg.Filtering.CustomRules {
+		rule = strings.TrimSpace(rule)
+		if rule == "" || strings.HasPrefix(rule, "#") || strings.HasPrefix(rule, "@@") {
 			continue
 		}
 
 		// Block rules
 		ruleStr := strings.TrimPrefix(rule, "||")
 		ruleStr = strings.TrimSuffix(ruleStr, "^")
+		ruleStr = strings.TrimSuffix(ruleStr, "$important")
+		ruleStr = strings.Split(ruleStr, "$")[0]
 		ruleStr = strings.ToLower(ruleStr)
+
+		// Handle wildcard patterns like *.domain.com
+		if strings.HasPrefix(ruleStr, "*.") {
+			baseDomain := strings.TrimPrefix(ruleStr, "*.")
+			if domain == baseDomain || strings.HasSuffix(domain, "."+baseDomain) {
+				return rule, true
+			}
+			continue
+		}
 
 		if domain == ruleStr || strings.HasSuffix(domain, "."+ruleStr) {
 			return rule, true

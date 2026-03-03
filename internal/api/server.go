@@ -17,6 +17,7 @@ import (
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/dnsserver"
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/filtering"
 	"github.com/AristarhUcolov/CNS-SOWA-SECURITY/internal/stats"
+	"github.com/miekg/dns"
 )
 
 // Server represents the API/Web server
@@ -134,9 +135,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/querylog/clear", s.handleQueryLogClear)
 	s.mux.HandleFunc("/api/health", s.handleHealth)
 	s.mux.HandleFunc("/api/upstream/stats", s.handleUpstreamStats)
+	s.mux.HandleFunc("/api/upstream/test", s.handleUpstreamTest)
 	s.mux.HandleFunc("/api/config/backup", s.handleConfigBackup)
 	s.mux.HandleFunc("/api/config/restore", s.handleConfigRestore)
 	s.mux.HandleFunc("/api/auth/sessions/revoke", s.handleSessionRevoke)
+	s.mux.HandleFunc("/api/whois", s.handleWhois)
 
 	// Static files (web UI)
 	s.mux.Handle("/", http.FileServer(http.Dir(s.webDir)))
@@ -232,6 +235,16 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		// Refresh safe search rewrite map after config change
 		s.filter.RefreshSafeSearch()
 
+		// If filtering rules or blocked services changed, refresh the filter engine
+		if _, ok := partial["filtering"]; ok {
+			go func() {
+				log.Println("[API] Config changed, refreshing filter engine...")
+				if err := s.filter.Refresh(); err != nil {
+					log.Printf("[API] Filter refresh error: %v", err)
+				}
+			}()
+		}
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 
 	default:
@@ -300,6 +313,14 @@ func (s *Server) handleBlocklistAdd(w http.ResponseWriter, r *http.Request) {
 		cfg.Filtering.BlockLists = append(cfg.Filtering.BlockLists, bl)
 	})
 
+	// Auto-refresh filters after adding a blocklist
+	go func() {
+		log.Println("[API] Blocklist added, refreshing filters...")
+		if err := s.filter.Refresh(); err != nil {
+			log.Printf("[API] Filter refresh error: %v", err)
+		}
+	}()
+
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
@@ -318,6 +339,14 @@ func (s *Server) handleWhitelistAdd(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Update(func(cfg *config.Config) {
 		cfg.Filtering.WhiteLists = append(cfg.Filtering.WhiteLists, wl)
 	})
+
+	// Auto-refresh filters after adding a whitelist
+	go func() {
+		log.Println("[API] Whitelist added, refreshing filters...")
+		if err := s.filter.Refresh(); err != nil {
+			log.Printf("[API] Filter refresh error: %v", err)
+		}
+	}()
 
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
@@ -348,6 +377,15 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.BlockLists[index].Enabled = body.Enabled
 		})
+
+		// Auto-refresh filters after toggle
+		go func() {
+			log.Println("[API] Blocklist toggled, refreshing filters...")
+			if err := s.filter.Refresh(); err != nil {
+				log.Printf("[API] Filter refresh error: %v", err)
+			}
+		}()
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
 	}
@@ -370,6 +408,15 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.BlockLists = append(cfg.Filtering.BlockLists[:index], cfg.Filtering.BlockLists[index+1:]...)
 		})
+
+		// Auto-refresh filters after deletion
+		go func() {
+			log.Println("[API] Blocklist removed, refreshing filters...")
+			if err := s.filter.Refresh(); err != nil {
+				log.Printf("[API] Filter refresh error: %v", err)
+			}
+		}()
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
 	}
@@ -403,6 +450,15 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.WhiteLists[index].Enabled = body.Enabled
 		})
+
+		// Auto-refresh filters after whitelist toggle
+		go func() {
+			log.Println("[API] Whitelist toggled, refreshing filters...")
+			if err := s.filter.Refresh(); err != nil {
+				log.Printf("[API] Filter refresh error: %v", err)
+			}
+		}()
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
 	}
@@ -419,6 +475,15 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.WhiteLists = append(cfg.Filtering.WhiteLists[:index], cfg.Filtering.WhiteLists[index+1:]...)
 		})
+
+		// Auto-refresh filters after whitelist removal
+		go func() {
+			log.Println("[API] Whitelist removed, refreshing filters...")
+			if err := s.filter.Refresh(); err != nil {
+				log.Printf("[API] Filter refresh error: %v", err)
+			}
+		}()
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
 	}
@@ -531,7 +596,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"dns_running":     s.dns.IsRunning(),
 		"dhcp_running":    s.dhcp.IsRunning(),
 		"protection":      s.cfg.Filtering.Enabled,
-		"version":         "1.4.3",
+		"version":         "1.4.4",
 		"cache_size":      s.dns.CacheSize(),
 		"dhcp_leases":     s.dhcp.GetLeaseCount(),
 		"uptime":          int64(uptime.Seconds()),
@@ -677,7 +742,9 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	jsonResponse(w, s.auth.GetSessions())
+	jsonResponse(w, map[string]interface{}{
+		"sessions": s.auth.GetSessions(),
+	})
 }
 
 // ==================== New Endpoints ====================
@@ -735,7 +802,12 @@ func (s *Server) handleTestDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := s.filter.Check(domain, "")
-	jsonResponse(w, result)
+	jsonResponse(w, map[string]interface{}{
+		"blocked":   result.IsBlocked,
+		"reason":    result.Reason,
+		"rule":      result.Rule,
+		"list_name": result.ListName,
+	})
 }
 
 func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
@@ -775,7 +847,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"version":  "1.4.3",
+		"version":  "1.4.4",
 		"dns_port": s.cfg.DNS.Port,
 		"web_port": s.cfg.Web.Port,
 		"ips":      ips,
@@ -801,6 +873,11 @@ func (s *Server) handleBlockedServices(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.BlockedServices = req.Services
 		})
+
+		// Clear DNS cache so blocked/unblocked services take effect immediately
+		s.dns.ClearCache()
+		log.Printf("[API] Blocked services updated: %v", req.Services)
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -838,6 +915,8 @@ func (s *Server) handleDNSRewrites(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.DNSRewrites = append(cfg.Filtering.DNSRewrites, rw)
 		})
+		s.dns.ClearCache() // Clear cache so rewrite takes effect immediately
+		log.Printf("[API] DNS rewrite added: %s -> %s", rw.Domain, rw.Answer)
 		jsonResponse(w, map[string]string{"status": "ok"})
 	case "DELETE":
 		indexStr := r.URL.Query().Get("index")
@@ -849,6 +928,8 @@ func (s *Server) handleDNSRewrites(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Filtering.DNSRewrites = append(cfg.Filtering.DNSRewrites[:index], cfg.Filtering.DNSRewrites[index+1:]...)
 		})
+		s.dns.ClearCache() // Clear cache so removal takes effect immediately
+		log.Println("[API] DNS rewrite removed")
 		jsonResponse(w, map[string]string{"status": "ok"})
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -931,7 +1012,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"uptime":       int64(uptime.Seconds()),
 		"uptime_human": formatDuration(uptime),
 		"start_time":   s.startTime.Format(time.RFC3339),
-		"version":      "1.4.3",
+		"version":      "1.4.4",
 		"go_version":   runtime.Version(),
 		"os":           runtime.GOOS,
 		"arch":         runtime.GOARCH,
@@ -974,7 +1055,7 @@ func (s *Server) handleUpstreamStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, map[string]interface{}{
-		"upstreams": s.dns.GetUpstreamLatency(),
+		"servers": s.dns.GetUpstreamLatency(),
 	})
 }
 
@@ -1044,6 +1125,234 @@ func (s *Server) handleSessionRevoke(w http.ResponseWriter, r *http.Request) {
 	s.auth.Logout(req.Token)
 	log.Printf("[API] Session revoked")
 	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+// ==================== WHOIS Lookup ====================
+
+func (s *Server) handleWhois(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		http.Error(w, `{"error":"domain parameter required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Clean domain
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domain = strings.TrimSuffix(domain, ".")
+
+	// Extract registrable domain (last two parts, e.g. google.com from www.google.com)
+	parts := strings.Split(domain, ".")
+	if len(parts) > 2 {
+		domain = strings.Join(parts[len(parts)-2:], ".")
+	}
+
+	// Perform WHOIS lookup via TCP to whois server
+	whoisData, err := s.queryWhois(domain)
+	if err != nil {
+		jsonResponse(w, map[string]interface{}{
+			"domain": domain,
+			"error":  err.Error(),
+			"raw":    "",
+		})
+		return
+	}
+
+	// Parse key fields
+	parsed := parseWhoisResponse(whoisData)
+	parsed["domain"] = domain
+	parsed["raw"] = whoisData
+
+	jsonResponse(w, parsed)
+}
+
+func (s *Server) queryWhois(domain string) (string, error) {
+	// Determine WHOIS server based on TLD
+	parts := strings.Split(domain, ".")
+	tld := parts[len(parts)-1]
+
+	whoisServers := map[string]string{
+		"com":  "whois.verisign-grs.com",
+		"net":  "whois.verisign-grs.com",
+		"org":  "whois.pir.org",
+		"info": "whois.afilias.net",
+		"io":   "whois.nic.io",
+		"me":   "whois.nic.me",
+		"co":   "whois.nic.co",
+		"us":   "whois.nic.us",
+		"uk":   "whois.nic.uk",
+		"de":   "whois.denic.de",
+		"ru":   "whois.tcinet.ru",
+		"su":   "whois.tcinet.ru",
+		"fr":   "whois.nic.fr",
+		"nl":   "whois.sidn.nl",
+		"eu":   "whois.eu",
+		"xyz":  "whois.nic.xyz",
+		"app":  "whois.nic.google",
+		"dev":  "whois.nic.google",
+	}
+
+	server := whoisServers[tld]
+	if server == "" {
+		server = "whois.iana.org"
+	}
+
+	conn, err := net.DialTimeout("tcp", server+":43", 5*time.Second)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to WHOIS server: %w", err)
+	}
+	defer conn.Close()
+
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+	_, err = fmt.Fprintf(conn, "%s\r\n", domain)
+	if err != nil {
+		return "", fmt.Errorf("failed to send WHOIS query: %w", err)
+	}
+
+	buf := make([]byte, 16384)
+	var result strings.Builder
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			result.Write(buf[:n])
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	if result.Len() == 0 {
+		return "", fmt.Errorf("empty WHOIS response")
+	}
+
+	return result.String(), nil
+}
+
+func parseWhoisResponse(raw string) map[string]interface{} {
+	result := make(map[string]interface{})
+	lines := strings.Split(raw, "\n")
+
+	fieldMap := map[string]string{
+		"registrar":                 "registrar",
+		"registrar url":             "registrar_url",
+		"creation date":             "created",
+		"updated date":              "updated",
+		"registry expiry date":      "expires",
+		"registrar expiry date":     "expires",
+		"expiration date":           "expires",
+		"name server":               "name_servers",
+		"domain status":             "status",
+		"registrant organization":   "organization",
+		"registrant country":        "country",
+		"registrant state/province": "state",
+		"admin email":               "admin_email",
+		"tech email":                "tech_email",
+		"dnssec":                    "dnssec",
+	}
+
+	var nameServers []string
+	var statuses []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "%") || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		idx := strings.Index(line, ":")
+		if idx < 0 {
+			continue
+		}
+
+		key := strings.TrimSpace(strings.ToLower(line[:idx]))
+		value := strings.TrimSpace(line[idx+1:])
+
+		if mapped, ok := fieldMap[key]; ok {
+			switch mapped {
+			case "name_servers":
+				nameServers = append(nameServers, value)
+			case "status":
+				// Extract just the status name (before URL)
+				statusParts := strings.Fields(value)
+				if len(statusParts) > 0 {
+					statuses = append(statuses, statusParts[0])
+				}
+			default:
+				if _, exists := result[mapped]; !exists {
+					result[mapped] = value
+				}
+			}
+		}
+	}
+
+	if len(nameServers) > 0 {
+		result["name_servers"] = nameServers
+	}
+	if len(statuses) > 0 {
+		result["status"] = statuses
+	}
+
+	return result
+}
+
+// ==================== Upstream DNS Test ====================
+
+func (s *Server) handleUpstreamTest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	testDomain := "www.google.com"
+
+	type testResult struct {
+		Server string  `json:"server"`
+		Status string  `json:"status"`
+		LatMs  float64 `json:"latency_ms"`
+		Error  string  `json:"error,omitempty"`
+	}
+
+	var results []testResult
+
+	upstreams := s.cfg.DNS.Upstreams
+	if len(upstreams) == 0 {
+		upstreams = s.cfg.DNS.FallbackServers
+	}
+
+	for _, upstream := range upstreams {
+		start := time.Now()
+		testReq := new(dns.Msg)
+		testReq.SetQuestion(dns.Fqdn(testDomain), dns.TypeA)
+		testReq.RecursionDesired = true
+
+		_, err := s.dns.TestUpstream(upstream, testReq)
+		elapsed := float64(time.Since(start).Microseconds()) / 1000.0
+
+		if err != nil {
+			results = append(results, testResult{
+				Server: upstream,
+				Status: "error",
+				LatMs:  elapsed,
+				Error:  err.Error(),
+			})
+		} else {
+			results = append(results, testResult{
+				Server: upstream,
+				Status: "ok",
+				LatMs:  elapsed,
+			})
+		}
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"results":     results,
+		"test_domain": testDomain,
+	})
 }
 
 // ==================== Helpers ====================

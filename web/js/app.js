@@ -749,6 +749,10 @@ function applyConfigToUI(cfg) {
 
     // Custom rules
     setValue('customRules', (cfg.filtering?.custom_rules || []).join('\n'));
+
+    // Auto-update interval
+    const auEl = document.getElementById('autoUpdateInterval');
+    if (auEl) auEl.value = String(cfg.filtering?.auto_update_interval ?? 24);
 }
 
 // ==================== Form Handlers ====================
@@ -905,6 +909,12 @@ function initForms() {
     document.getElementById('addWhitelist')?.addEventListener('click', showAddWhitelistModal);
     document.getElementById('refreshLists')?.addEventListener('click', refreshAllLists);
 
+    // Auto-update interval
+    document.getElementById('autoUpdateInterval')?.addEventListener('change', async (e) => {
+        const hours = parseInt(e.target.value);
+        await saveConfig({ filtering: { auto_update_interval: hours } });
+    });
+
     // Clear cache
     document.getElementById('clearCache')?.addEventListener('click', async () => {
         try {
@@ -913,6 +923,35 @@ function initForms() {
             else showToast('Failed to clear cache', 'error');
         } catch (e) {
             if (e.message !== 'Unauthorized') showToast('Error clearing cache', 'error');
+        }
+    });
+
+    // Dashboard stats reset
+    document.getElementById('resetStats')?.addEventListener('click', async () => {
+        if (!confirm('Reset all dashboard statistics? This cannot be undone.')) return;
+        try {
+            const resp = await apiFetch('/api/stats/reset', { method: 'POST' });
+            if (resp.ok) {
+                showToast('Dashboard statistics reset', 'success');
+                loadDashboard();
+            } else showToast('Failed to reset statistics', 'error');
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Error resetting statistics', 'error');
+        }
+    });
+
+    // Test upstream DNS
+    document.getElementById('testUpstreams')?.addEventListener('click', testUpstreamServers);
+
+    // WHOIS lookup
+    document.getElementById('whoisBtn')?.addEventListener('click', () => {
+        const domain = document.getElementById('whoisDomain')?.value?.trim();
+        if (domain) lookupWhois(domain);
+    });
+    document.getElementById('whoisDomain')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const domain = e.target.value.trim();
+            if (domain) lookupWhois(domain);
         }
     });
 
@@ -1903,18 +1942,20 @@ async function loadUpstreamStats() {
         const keys = Object.keys(servers);
 
         if (keys.length === 0) {
-            container.innerHTML = '<div class="empty-state"><i class="fas fa-server"></i><p>No upstream data yet</p></div>';
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-server"></i><p>No upstream data yet. Make some DNS queries first.</p></div>';
             return;
         }
 
         container.innerHTML = keys.map(name => {
             const s = servers[name];
+            const avgMs = typeof s.avg_ms === 'number' ? s.avg_ms.toFixed(1) : parseFloat(s.avg_ms || 0).toFixed(1);
+            const lastMs = typeof s.last_ms === 'number' ? s.last_ms.toFixed(1) : parseFloat(s.last_ms || 0).toFixed(1);
             return `
                 <div class="upstream-item">
                     <div class="upstream-name"><i class="fas fa-server"></i> ${escapeHtml(name)}</div>
                     <div class="upstream-stats">
-                        <span class="latency"><i class="fas fa-tachometer-alt"></i> Avg: ${s.avg_ms.toFixed(1)}ms</span>
-                        <span class="latency"><i class="fas fa-clock"></i> Last: ${s.last_ms.toFixed(1)}ms</span>
+                        <span class="latency"><i class="fas fa-tachometer-alt"></i> Avg: ${avgMs}ms</span>
+                        <span class="latency"><i class="fas fa-clock"></i> Last: ${lastMs}ms</span>
                         <span><i class="fas fa-exchange-alt"></i> ${s.count} queries</span>
                         <span class="errors"><i class="fas fa-exclamation-triangle"></i> ${s.errors} errors</span>
                     </div>
@@ -1923,6 +1964,117 @@ async function loadUpstreamStats() {
         }).join('');
     } catch (e) {
         container.innerHTML = '<div class="error-message">Failed to load upstream stats</div>';
+    }
+}
+
+// ==================== Upstream DNS Test ====================
+
+async function testUpstreamServers() {
+    const btn = document.getElementById('testUpstreams');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    }
+
+    try {
+        const resp = await apiFetch('/api/upstream/test', { method: 'POST' });
+        if (!resp.ok) throw new Error('Test failed');
+        const data = await resp.json();
+        const results = data.results || [];
+
+        let html = `<div class="test-results-header"><strong>Test Domain:</strong> ${escapeHtml(data.test_domain)}</div>`;
+        html += results.map(r => {
+            const statusClass = r.status === 'ok' ? 'success' : 'error';
+            const statusIcon = r.status === 'ok' ? 'check-circle' : 'times-circle';
+            return `
+                <div class="upstream-test-result ${statusClass}">
+                    <div class="upstream-name"><i class="fas fa-server"></i> ${escapeHtml(r.server)}</div>
+                    <div class="upstream-test-info">
+                        <span class="status"><i class="fas fa-${statusIcon}"></i> ${r.status.toUpperCase()}</span>
+                        <span class="latency"><i class="fas fa-tachometer-alt"></i> ${r.latency_ms.toFixed(1)}ms</span>
+                        ${r.error ? `<span class="error-msg">${escapeHtml(r.error)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const container = document.getElementById('upstreamTestResults');
+        if (container) {
+            container.innerHTML = html;
+            container.style.display = 'block';
+        } else {
+            showModal('Upstream DNS Test Results', html);
+        }
+
+        showToast('Upstream test completed', 'success');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') showToast('Error testing upstreams', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-vial"></i> Test Upstream Servers';
+        }
+    }
+}
+
+// ==================== WHOIS Lookup ====================
+
+async function lookupWhois(domain) {
+    const resultEl = document.getElementById('whoisResult');
+    if (resultEl) {
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="loading-placeholder"><i class="fas fa-spinner fa-spin"></i> Looking up WHOIS data...</div>';
+    }
+
+    try {
+        const resp = await apiFetch(`/api/whois?domain=${encodeURIComponent(domain)}`);
+        if (!resp.ok) throw new Error('WHOIS lookup failed');
+        const data = await resp.json();
+
+        if (data.error) {
+            if (resultEl) resultEl.innerHTML = `<div class="error-message"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(data.error)}</div>`;
+            return;
+        }
+
+        let html = `<div class="whois-info">`;
+        html += `<h4><i class="fas fa-globe"></i> ${escapeHtml(data.domain || domain)}</h4>`;
+        
+        const fields = [
+            { key: 'registrar', label: 'Registrar', icon: 'fa-building' },
+            { key: 'registrar_url', label: 'Registrar URL', icon: 'fa-link' },
+            { key: 'organization', label: 'Organization', icon: 'fa-users' },
+            { key: 'country', label: 'Country', icon: 'fa-flag' },
+            { key: 'created', label: 'Created', icon: 'fa-calendar-plus' },
+            { key: 'updated', label: 'Updated', icon: 'fa-calendar-check' },
+            { key: 'expires', label: 'Expires', icon: 'fa-calendar-times' },
+            { key: 'dnssec', label: 'DNSSEC', icon: 'fa-shield-alt' },
+        ];
+
+        for (const f of fields) {
+            if (data[f.key]) {
+                html += `<div class="whois-field"><i class="fas ${f.icon}"></i><span class="whois-label">${f.label}:</span><span class="whois-value">${escapeHtml(data[f.key])}</span></div>`;
+            }
+        }
+
+        if (data.name_servers && data.name_servers.length > 0) {
+            html += `<div class="whois-field"><i class="fas fa-server"></i><span class="whois-label">Name Servers:</span><span class="whois-value">${data.name_servers.map(ns => escapeHtml(ns)).join(', ')}</span></div>`;
+        }
+
+        if (data.status && data.status.length > 0) {
+            html += `<div class="whois-field"><i class="fas fa-info-circle"></i><span class="whois-label">Status:</span><span class="whois-value">${data.status.map(s => `<span class="badge active" style="font-size:0.75em;margin:2px;">${escapeHtml(s)}</span>`).join(' ')}</span></div>`;
+        }
+
+        html += `</div>`;
+
+        // Add raw data toggle
+        if (data.raw) {
+            html += `<details class="whois-raw"><summary><i class="fas fa-code"></i> Raw WHOIS Data</summary><pre>${escapeHtml(data.raw)}</pre></details>`;
+        }
+
+        if (resultEl) resultEl.innerHTML = html;
+    } catch (e) {
+        if (resultEl) resultEl.innerHTML = '<div class="error-message">Failed to perform WHOIS lookup</div>';
+        if (e.message !== 'Unauthorized') showToast('Error performing WHOIS lookup', 'error');
     }
 }
 

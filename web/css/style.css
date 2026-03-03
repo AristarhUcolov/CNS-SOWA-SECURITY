@@ -922,25 +922,53 @@ body {
 }
 
 .sidebar-footer {
-    padding: 16px;
+    padding: 12px 16px;
     border-top: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.sidebar-footer a {
+.sidebar-footer-links {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.sidebar-footer-links a {
     color: var(--text-muted);
     text-decoration: none;
     font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     transition: var(--transition);
     padding: 4px 0;
 }
 
-.sidebar-footer a:hover {
+.sidebar-footer-links a:hover {
+    color: var(--accent-primary);
+}
+
+.sidebar-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-footer-actions a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: var(--transition);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.sidebar-footer-actions a:hover {
     color: var(--accent-primary);
 }
 
@@ -2116,17 +2144,17 @@ h4 {
 .theme-toggle {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    gap: 6px;
+    padding: 4px 10px;
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 13px;
-    border-radius: 8px;
+    font-size: 12px;
+    border-radius: 6px;
     transition: var(--transition);
-    border: none;
-    background: none;
-    width: 100%;
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
     font-family: inherit;
+    white-space: nowrap;
 }
 
 .theme-toggle:hover {
@@ -2363,6 +2391,160 @@ h4 {
 .schedule-times {
     display: flex;
     gap: 16px;
+}
+
+/* ==================== WHOIS Lookup ==================== */
+.whois-info {
+    background: var(--bg-input);
+    border-radius: 10px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+}
+
+.whois-info h4 {
+    margin: 0 0 16px 0;
+    color: var(--accent-primary);
+    font-size: 1.1em;
+}
+
+.whois-field {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.9em;
+}
+
+.whois-field:last-child {
+    border-bottom: none;
+}
+
+.whois-field i {
+    color: var(--text-muted);
+    width: 18px;
+    text-align: center;
+    margin-top: 2px;
+}
+
+.whois-label {
+    color: var(--text-muted);
+    min-width: 120px;
+    font-weight: 500;
+}
+
+.whois-value {
+    color: var(--text-color);
+    word-break: break-all;
+}
+
+.whois-raw {
+    margin-top: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.whois-raw summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.whois-raw summary:hover {
+    color: var(--accent-primary);
+}
+
+.whois-raw pre {
+    padding: 14px;
+    margin: 0;
+    font-size: 0.8em;
+    overflow-x: auto;
+    background: var(--bg-main);
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* ==================== Upstream Test Results ==================== */
+.upstream-test-results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.test-results-header {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.upstream-test-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+}
+
+.upstream-test-result.success {
+    border-color: rgba(0, 212, 110, 0.3);
+}
+
+.upstream-test-result.error {
+    border-color: rgba(255, 68, 68, 0.3);
+}
+
+.upstream-test-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 0.9em;
+}
+
+.upstream-test-info .status {
+    font-weight: 600;
+}
+
+.upstream-test-result.success .status {
+    color: var(--success);
+}
+
+.upstream-test-result.error .status {
+    color: var(--danger);
+}
+
+.upstream-test-info .error-msg {
+    color: var(--danger);
+    font-size: 0.85em;
+}
+
+/* ==================== Auto Update Interval ==================== */
+.select-input {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-input);
+    color: var(--text-color);
+    font-size: 0.9em;
+    font-family: inherit;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.select-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
 }
 
 .schedule-times .form-group {

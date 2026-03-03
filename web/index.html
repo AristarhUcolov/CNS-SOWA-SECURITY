@@ -201,7 +201,7 @@
                     <i class="fas fa-shield-halved"></i>
                     <span class="logo-text">S.O.W.A</span>
                 </div>
-                <span class="version">v1.4.3</span>
+                <span class="version">v1.4.4</span>
             </div>
             
             <ul class="nav-menu">
@@ -259,19 +259,23 @@
             </ul>
             
             <div class="sidebar-footer">
-                <button class="theme-toggle" id="themeToggle" title="Toggle theme">
-                    <i class="fas fa-moon" id="themeIcon"></i>
-                    <span id="themeLabel">Dark Mode</span>
-                </button>
-                <a href="https://aristarhucolov.github.io/C.N.S-Clear.Net.Sky-S.O.W.A/" target="_blank">
-                    <i class="fas fa-globe"></i> C.N.S Website
-                </a>
-                <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY" target="_blank">
-                    <i class="fab fa-github"></i> GitHub
-                </a>
-                <a href="#" id="logoutBtn" class="logout-link">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
+                <div class="sidebar-footer-links">
+                    <a href="https://aristarhucolov.github.io/C.N.S-Clear.Net.Sky-S.O.W.A/" target="_blank" title="C.N.S Website">
+                        <i class="fas fa-globe"></i> <span>C.N.S Website</span>
+                    </a>
+                    <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY" target="_blank" title="GitHub">
+                        <i class="fab fa-github"></i> <span>GitHub</span>
+                    </a>
+                </div>
+                <div class="sidebar-footer-actions">
+                    <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+                        <i class="fas fa-moon" id="themeIcon"></i>
+                        <span id="themeLabel">Dark</span>
+                    </button>
+                    <a href="#" id="logoutBtn" class="logout-link" title="Logout">
+                        <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+                    </a>
+                </div>
             </div>
         </nav>
 
@@ -378,6 +382,12 @@
                             <canvas id="queryTypesChart"></canvas>
                         </div>
                     </div>
+                </div>
+
+                <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" id="resetStats" title="Reset all dashboard statistics">
+                        <i class="fas fa-undo"></i> Reset Statistics
+                    </button>
                 </div>
 
                 <div class="tables-grid">
@@ -489,6 +499,17 @@
                         <div id="testDomainResult" class="test-result" style="display:none;"></div>
                     </div>
                 </div>
+                <div class="card">
+                    <div class="card-header"><h3><i class="fas fa-globe-americas"></i> WHOIS Lookup</h3></div>
+                    <div class="card-body">
+                        <p class="hint">Look up domain registration information (registrar, expiry, name servers, etc.).</p>
+                        <div class="form-inline">
+                            <input type="text" id="whoisDomain" placeholder="Enter domain (e.g. example.com)..." class="flex-input">
+                            <button class="btn btn-primary" id="whoisBtn"><i class="fas fa-search"></i> WHOIS</button>
+                        </div>
+                        <div id="whoisResult" style="display:none;margin-top:16px;"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Blocklists Page -->
@@ -523,10 +544,24 @@
                         <h3><i class="fas fa-sync-alt"></i> Update Lists</h3>
                     </div>
                     <div class="card-body">
-                        <button class="btn btn-primary" id="refreshLists">
-                            <i class="fas fa-download"></i> Update All Lists Now
-                        </button>
-                        <span id="lastUpdate" class="hint"></span>
+                        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                            <button class="btn btn-primary" id="refreshLists">
+                                <i class="fas fa-download"></i> Update All Lists Now
+                            </button>
+                            <div class="form-group" style="margin:0;">
+                                <label style="font-size:0.85em;margin-bottom:4px;">Auto-Update Interval</label>
+                                <select id="autoUpdateInterval" class="select-input" style="width:auto;min-width:150px;">
+                                    <option value="0">Disabled</option>
+                                    <option value="1">Every 1 hour</option>
+                                    <option value="6">Every 6 hours</option>
+                                    <option value="12">Every 12 hours</option>
+                                    <option value="24" selected>Every 24 hours</option>
+                                    <option value="48">Every 48 hours</option>
+                                    <option value="168">Every 7 days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <span id="lastUpdate" class="hint" style="display:block;margin-top:8px;"></span>
                     </div>
                 </div>
             </div>
@@ -1067,6 +1102,12 @@
                         <div id="upstreamStats" class="upstream-stats">
                             <div class="loading-placeholder">Loading upstream stats...</div>
                         </div>
+                        <div style="margin-top:16px;">
+                            <button class="btn btn-primary" id="testUpstreams">
+                                <i class="fas fa-vial"></i> Test Upstream Servers
+                            </button>
+                        </div>
+                        <div id="upstreamTestResults" class="upstream-test-results" style="display:none;margin-top:16px;"></div>
                     </div>
                 </div>
 

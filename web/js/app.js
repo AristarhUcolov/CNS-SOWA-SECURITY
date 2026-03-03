@@ -630,22 +630,48 @@ function fillTopTable(tableId, dataMap) {
     tbody.innerHTML = sorted.map(([key, val]) => {
         let actionCell = '';
         if (isClients) {
-            // No block/allow for client IPs — just show a test icon
-            actionCell = '';
+            // Click to view client's queries
+            actionCell = `<button class="btn btn-xs" onclick="filterQueryLogByClient('${escapeHtml(key)}')" title="View queries"><i class="fas fa-eye"></i></button>`;
         } else if (isBlocked) {
             actionCell = `<button class="btn btn-xs btn-success" onclick="quickAllowDomain('${escapeHtml(key)}')" title="Allow"><i class="fas fa-check"></i></button>`;
         } else {
             actionCell = `<button class="btn btn-xs btn-danger" onclick="quickBlockDomain('${escapeHtml(key)}')" title="Block"><i class="fas fa-ban"></i></button>`;
         }
-        const nameCell = isClients
-            ? `<td><i class="fas fa-desktop" style="color:var(--accent-color);margin-right:6px;"></i>${escapeHtml(key)}</td>`
-            : `<td><span class="domain-link" onclick="testDomain('${escapeHtml(key)}')" title="Test this domain">${escapeHtml(key)}</span></td>`;
+        let nameCell;
+        if (isClients) {
+            nameCell = `<td>
+                <span class="client-link" onclick="filterQueryLogByClient('${escapeHtml(key)}')" title="Click to view queries">
+                    <i class="fas fa-desktop" style="color:var(--accent-color);margin-right:6px;"></i>${escapeHtml(key)}
+                </span>
+            </td>`;
+        } else {
+            nameCell = `<td class="ql-domain-cell">
+                <span class="domain-link" onclick="testDomain('${escapeHtml(key)}')" title="Test this domain">${escapeHtml(key)}</span>
+                <span class="ql-whois-icon" data-domain="${escapeHtml(key)}" onmouseenter="showWhoisTooltip(event, this)" onmouseleave="hideWhoisTooltip()" title="WHOIS info">
+                    <i class="fas fa-info-circle"></i>
+                </span>
+            </td>`;
+        }
         return `<tr>
             ${nameCell}
             <td>${formatNumber(val)}</td>
             <td>${actionCell}</td>
         </tr>`;
     }).join('');
+}
+
+// Navigate to Query Log filtered by client IP
+function filterQueryLogByClient(clientIP) {
+    navigateToPage('querylog');
+    // Wait for page to render, then set search filter
+    setTimeout(() => {
+        const searchInput = document.getElementById('queryLogSearch');
+        if (searchInput) {
+            searchInput.value = clientIP;
+            qlCurrentPage = 0;
+            loadQueryLog();
+        }
+    }, 100);
 }
 
 // ==================== Domain Test ====================
@@ -1194,7 +1220,7 @@ async function loadQueryLog() {
                         </span>
                     </td>
                     <td><span class="ql-type-badge">${escapeHtml(entry.type)}</span></td>
-                    <td><span class="ql-client" title="Click to copy" onclick="copyText('${escapeHtml(entry.client_ip)}')">${escapeHtml(entry.client_ip)}</span></td>
+                    <td><span class="ql-client" title="Click to filter by this client" onclick="filterQueryLogByClient('${escapeHtml(entry.client_ip)}')">${escapeHtml(entry.client_ip)}</span></td>
                     <td>${status}</td>
                     <td>${escapeHtml(entry.duration)}</td>
                     <td>${actionBtn}</td>

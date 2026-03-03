@@ -676,7 +676,8 @@ func (s *Server) writeDNSRewriteResponse(w dns.ResponseWriter, r *dns.Msg, rewri
 			})
 		}
 	} else {
-		// CNAME answer
+		// CNAME answer — also resolve the target via upstream
+		target := dns.Fqdn(rewrite.Answer)
 		resp.Answer = append(resp.Answer, &dns.CNAME{
 			Hdr: dns.RR_Header{
 				Name:   question.Name,
@@ -684,8 +685,18 @@ func (s *Server) writeDNSRewriteResponse(w dns.ResponseWriter, r *dns.Msg, rewri
 				Class:  dns.ClassINET,
 				Ttl:    300,
 			},
-			Target: dns.Fqdn(rewrite.Answer),
+			Target: target,
 		})
+
+		// Resolve the CNAME target to include A/AAAA records
+		resReq := new(dns.Msg)
+		resReq.SetQuestion(target, question.Qtype)
+		resReq.RecursionDesired = true
+		if resolved, err := s.upstream.Resolve(resReq); err == nil && resolved != nil {
+			for _, rr := range resolved.Answer {
+				resp.Answer = append(resp.Answer, rr)
+			}
+		}
 	}
 
 	if err := w.WriteMsg(resp); err != nil {

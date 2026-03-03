@@ -214,6 +214,12 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 				if v, ok := filterPartial["parental"]; ok {
 					json.Unmarshal(v, &cfg.Filtering.Parental)
 				}
+				if v, ok := filterPartial["auto_update_interval"]; ok {
+					json.Unmarshal(v, &cfg.Filtering.AutoUpdateInterval)
+				}
+				if v, ok := filterPartial["dns_rewrites"]; ok {
+					json.Unmarshal(v, &cfg.Filtering.DNSRewrites)
+				}
 			}
 			if dhcpData, ok := partial["dhcp"]; ok {
 				json.Unmarshal(dhcpData, &cfg.DHCP)
@@ -243,6 +249,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 					log.Printf("[API] Filter refresh error: %v", err)
 				}
 			}()
+			// Clear DNS cache so changes take effect immediately
+			// (custom rules, parental controls, blocked services, etc.)
+			s.dns.ClearCache()
 		}
 
 		jsonResponse(w, map[string]string{"status": "ok"})

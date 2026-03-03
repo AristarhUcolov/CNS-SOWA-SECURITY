@@ -2789,3 +2789,27 @@ tr:hover .ql-whois-icon {
 
 /* ==================== Nav Item Active Indicator ==================== */
 /* Already defined in sidebar section above */
+
+/* ==================== Client Link ==================== */
+.client-link {
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+}
+
+.client-link:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}
+
+/* ==================== Query Log Client Click ==================== */
+.ql-client {
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.ql-client:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
+}

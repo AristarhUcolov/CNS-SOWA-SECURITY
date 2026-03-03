@@ -5,25 +5,25 @@
 </p>
 
 <p align="center">
-  <strong>Network-wide DNS protection, ad blocking & parental control</strong>
-</p>
-
-<p align="center">
   <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/releases"><img src="https://img.shields.io/github/v/release/AristarhUcolov/CNS-SOWA-SECURITY?color=blue&label=version" alt="Version"></a>
   <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/blob/main/LICENSE"><img src="https://img.shields.io/github/license/AristarhUcolov/CNS-SOWA-SECURITY" alt="License"></a>
   <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go"></a>
   <a href="https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/stargazers"><img src="https://img.shields.io/github/stars/AristarhUcolov/CNS-SOWA-SECURITY?style=flat" alt="Stars"></a>
 </p>
 
+<p align="center">
+  <a href="#-ru--Русский">🇷🇺 Русский</a> · <a href="#-en--english">🇬🇧 English</a>
+</p>
+
 ---
 
-## 🇷🇺 Русский
+# 🇷🇺 RU / Русский
 
-### 🔐 S.O.W.A Security Software — DNS-защита и фильтрация
+## 🔐 S.O.W.A Security Software — DNS-защита и фильтрация
 
 **S.O.W.A Security Software** — полнофункциональное программное обеспечение для DNS-фильтрации и защиты, разработанное организацией **C.N.S (Clear Net Sky)**. Работает как сетевой DNS-сервер, блокируя рекламу, трекеры, вредоносные сайты и нежелательный контент на уровне DNS-запросов для всех устройств в сети.
 
-### ✨ Возможности
+## ✨ Возможности
 
 | Категория | Описание |
 |-----------|----------|
@@ -43,17 +43,14 @@
 | 🔄 **Авто-обновление** | Автоматическое обновление блокировочных списков |
 | 💾 **Резервное копирование** | Экспорт/импорт настроек |
 
-### 🚀 Быстрый старт
+## 🚀 Быстрый старт
 
-```bash
-# 1. Скачайте sowa-security.exe из Releases
-# 2. Запустите EXE файл (от имени администратора для DHCP)
-# 3. Откройте браузер:
-http://localhost:8080
-# 4. Настройте DNS вашего устройства на 127.0.0.1
-```
+1. Скачайте `sowa-security.exe` из [Releases](https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/releases)
+2. Запустите EXE файл (от имени администратора для DHCP)
+3. Откройте браузер: `http://localhost:8080`
+4. Настройте DNS вашего устройства на `127.0.0.1`
 
-### 🔧 Сборка из исходников
+## 🔧 Сборка из исходников
 
 ```bash
 git clone https://github.com/AristarhUcolov/CNS-SOWA-SECURITY.git
@@ -64,7 +61,7 @@ go build -o build/sowa-security.exe ./cmd/sowa/
 
 Или используйте `build.bat` на Windows.
 
-### 📂 Структура проекта
+## 📂 Структура проекта
 
 ```
 ├── cmd/sowa/               # Точка входа приложения
@@ -89,15 +86,60 @@ go build -o build/sowa-security.exe ./cmd/sowa/
 └── build/                  # Скомпилированные файлы
 ```
 
+## 🔗 Ссылки
+
+- 🌐 [Сайт Clear Net Sky](https://aristarhucolov.github.io/C.N.S-Clear.Net.Sky-S.O.W.A/)
+- 📋 [DNS-списки блокировки (S.O.W.A Lists)](https://github.com/AristarhUcolov/CNS-SOWA-DNS-BLACKLIST-FILTERING)
+- 🔐 [S.O.W.A Security Software](https://github.com/AristarhUcolov/CNS-SOWA-SECURITY)
+
+## 🙏 Благодарности
+
+Этот проект стал возможен благодаря потрясающим open-source проектам и их авторам:
+
+| Проект | Автор | Описание |
+|--------|-------|----------|
+| [Go](https://go.dev/) | Google | Язык программирования |
+| [miekg/dns](https://github.com/miekg/dns) | **Miek Gieben** | DNS-библиотека для Go — основа нашего DNS-сервера |
+| [Chart.js](https://www.chartjs.org/) | Chart.js Contributors | Библиотека графиков для веб-интерфейса |
+| [Font Awesome](https://fontawesome.com/) | Fonticons, Inc. | Библиотека иконок |
+| [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) | AdGuard Team | Вдохновение для архитектуры и UX |
+| [Pi-hole](https://pi-hole.net/) | Pi-hole LLC | Пионер DNS-блокировки |
+
+**Go-модули:**
+- [`golang.org/x/net`](https://pkg.go.dev/golang.org/x/net) — расширенная сетевая поддержка
+- [`golang.org/x/sync`](https://pkg.go.dev/golang.org/x/sync) — синхронизация горутин
+- [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys) — системные вызовы
+
+## 📜 Лицензия
+
+Данный проект распространяется под лицензией **GNU General Public License v3.0 (GPL-3.0)**.
+
+Полный текст лицензии: [LICENSE](LICENSE)
+
+- ✅ Свободное использование, модификация и распространение
+- ✅ Обязательное указание авторства
+- ✅ Открытый исходный код в производных работах
+- ❌ Нельзя использовать в закрытом коммерческом ПО
+
+## 👥 Команда
+
+Разработано **C.N.S (Clear Net Sky)** совместно с **S.A** и **OpcoderZ-Security**.
+
 ---
 
-## 🇬🇧 English
+<p align="center">
+  <a href="#-en--english">🇬🇧 Switch to English ↓</a>
+</p>
 
-### 🔐 S.O.W.A Security Software — DNS Protection & Filtering
+---
+
+# 🇬🇧 EN / English
+
+## 🔐 S.O.W.A Security Software — DNS Protection & Filtering
 
 **S.O.W.A Security Software** — full-featured DNS filtering and protection software developed by **C.N.S (Clear Net Sky)** organization. It operates as a network DNS server, blocking ads, trackers, malware, and unwanted content at the DNS query level for all devices on the network.
 
-### ✨ Features
+## ✨ Features
 
 | Category | Description |
 |----------|-------------|
@@ -117,17 +159,14 @@ go build -o build/sowa-security.exe ./cmd/sowa/
 | 🔄 **Auto-Update** | Automatic blocklist updates with configurable interval |
 | 💾 **Backup & Restore** | Export/import configuration |
 
-### 🚀 Quick Start
+## 🚀 Quick Start
 
-```bash
-# 1. Download sowa-security.exe from Releases
-# 2. Run the EXE file (as administrator for DHCP)
-# 3. Open browser:
-http://localhost:8080
-# 4. Set your device's DNS to 127.0.0.1
-```
+1. Download `sowa-security.exe` from [Releases](https://github.com/AristarhUcolov/CNS-SOWA-SECURITY/releases)
+2. Run the EXE file (as administrator for DHCP)
+3. Open browser: `http://localhost:8080`
+4. Set your device's DNS to `127.0.0.1`
 
-### 🔧 Build from Source
+## 🔧 Build from Source
 
 ```bash
 git clone https://github.com/AristarhUcolov/CNS-SOWA-SECURITY.git
@@ -138,7 +177,30 @@ go build -o build/sowa-security.exe ./cmd/sowa/
 
 Or use `build.bat` on Windows.
 
----
+## 📂 Project Structure
+
+```
+├── cmd/sowa/               # Application entry point
+├── internal/
+│   ├── api/                # REST API and web server
+│   ├── auth/               # Authentication and sessions
+│   ├── config/             # Configuration
+│   ├── dhcp/               # DHCP server
+│   ├── dnsserver/          # DNS server (UDP/TCP/DoH/DoT)
+│   │   ├── server.go       # Main DNS server
+│   │   ├── upstream.go     # Upstream DNS resolver
+│   │   └── encrypted.go    # Encrypted DNS
+│   ├── filtering/          # Filtering engine
+│   │   ├── engine.go       # Main engine
+│   │   └── safesearch.go   # Safe Search
+│   └── stats/              # Statistics and query log
+├── web/                    # Web interface (HTML/CSS/JS)
+├── data/                   # Data (lists, config, statistics)
+│   ├── blacklist/          # Blocklist cache
+│   ├── whitelist/          # Whitelist cache
+│   └── config/             # Configuration and statistics
+└── build/                  # Compiled files
+```
 
 ## 🔗 Links
 
@@ -146,72 +208,49 @@ Or use `build.bat` on Windows.
 - 📋 [DNS Blacklist Filtering (S.O.W.A Lists)](https://github.com/AristarhUcolov/CNS-SOWA-DNS-BLACKLIST-FILTERING)
 - 🔐 [S.O.W.A Security Software](https://github.com/AristarhUcolov/CNS-SOWA-SECURITY)
 
----
+## 🙏 Acknowledgments
 
-## 🙏 Благодарности / Acknowledgments
-
-Этот проект стал возможен благодаря потрясающим open-source проектам и их авторам:
 This project was made possible by the amazing open-source projects and their authors:
 
-### 🏗️ Основа / Core
+| Project | Author | Description |
+|---------|--------|-------------|
+| [Go](https://go.dev/) | Google | Programming language |
+| [miekg/dns](https://github.com/miekg/dns) | **Miek Gieben** | DNS library for Go — the foundation of our DNS server |
+| [Chart.js](https://www.chartjs.org/) | Chart.js Contributors | Charting library for the web interface |
+| [Font Awesome](https://fontawesome.com/) | Fonticons, Inc. | Icon library |
+| [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) | AdGuard Team | Inspiration for architecture and UX |
+| [Pi-hole](https://pi-hole.net/) | Pi-hole LLC | DNS blocking pioneer |
 
-| Проект / Project | Автор / Author | Описание / Description |
-|---|---|---|
-| [Go](https://go.dev/) | Google | Язык программирования / Programming language |
-| [miekg/dns](https://github.com/miekg/dns) | **Miek Gieben** | DNS-библиотека для Go — основа нашего DNS-сервера / DNS library for Go — the foundation of our DNS server |
+**Go Modules:**
+- [`golang.org/x/net`](https://pkg.go.dev/golang.org/x/net) — extended networking support
+- [`golang.org/x/sync`](https://pkg.go.dev/golang.org/x/sync) — goroutine synchronization
+- [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys) — system calls
 
-### 🎨 Веб-интерфейс / Web Interface
-
-| Проект / Project | Автор / Author | Описание / Description |
-|---|---|---|
-| [Chart.js](https://www.chartjs.org/) | Chart.js Contributors | Библиотека графиков / Charting library |
-| [Font Awesome](https://fontawesome.com/) | Fonticons, Inc. | Иконки / Icon library |
-
-### 💡 Вдохновение / Inspiration
-
-| Проект / Project | Описание / Description |
-|---|---|
-| [AdGuard Home](https://github.com/AdguardTeam/AdGuardHome) | Вдохновение для архитектуры и UX / Inspiration for architecture and UX |
-| [Pi-hole](https://pi-hole.net/) | Пионер DNS-блокировки / DNS blocking pioneer |
-
-### 🔧 Go-модули / Go Modules
-
-- [`golang.org/x/net`](https://pkg.go.dev/golang.org/x/net) — расширенная сетевая поддержка / extended networking
-- [`golang.org/x/sync`](https://pkg.go.dev/golang.org/x/sync) — синхронизация горутин / goroutine synchronization
-- [`golang.org/x/sys`](https://pkg.go.dev/golang.org/x/sys) — системные вызовы / system calls
-
----
-
-## 📜 Лицензия / License
-
-Данный проект распространяется под лицензией **GNU General Public License v3.0 (GPL-3.0)**.
+## 📜 License
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
 
-Полный текст лицензии: [LICENSE](LICENSE)
 Full license text: [LICENSE](LICENSE)
 
-### Что это значит / What this means:
+- ✅ Free to use, modify, and distribute
+- ✅ Attribution required
+- ✅ Source code must remain open in derivative works
+- ❌ Cannot be used in proprietary commercial software
 
-- ✅ Свободное использование, модификация и распространение / Free to use, modify, and distribute
-- ✅ Обязательное указание авторства / Attribution required
-- ✅ Открытый исходный код в производных работах / Source code must remain open in derivative works
-- ❌ Нельзя использовать в закрытом коммерческом ПО / Cannot be used in proprietary commercial software
-
----
-
-## 👥 Команда / Team
-
-Разработано **C.N.S (Clear Net Sky)** совместно с **S.A** и **OpcoderZ-Security**.
+## 👥 Team
 
 Developed by **C.N.S (Clear Net Sky)** in collaboration with **S.A** and **OpcoderZ-Security**.
 
 ---
 
 <p align="center">
-  <strong>S.O.W.A Security Software</strong> — защита вашей сети на уровне DNS
-  <br>
+  <a href="#-ru--Русский">🇷🇺 Переключить на Русский ↑</a>
+</p>
+
+---
+
+<p align="center">
   <strong>S.O.W.A Security Software</strong> — protecting your network at the DNS level
   <br><br>
-  <em>© 2024-2025 C.N.S (Clear Net Sky). All rights reserved.</em>
+  <em>© 2024-2026 C.N.S (Clear Net Sky). All rights reserved.</em>
 </p>

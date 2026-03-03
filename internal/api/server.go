@@ -270,6 +270,9 @@ func (s *Server) handleProtectionToggle(w http.ResponseWriter, r *http.Request) 
 	s.cfg.Filtering.Enabled = !s.cfg.Filtering.Enabled
 	s.cfg.Save()
 
+	// Clear DNS cache so the toggle takes effect immediately
+	s.dns.ClearCache()
+
 	jsonResponse(w, map[string]bool{"enabled": s.cfg.Filtering.Enabled})
 }
 
@@ -300,6 +303,10 @@ func (s *Server) handleFilteringRefresh(w http.ResponseWriter, r *http.Request) 
 
 	stats := s.filter.GetStats()
 	log.Printf("[API] Blocklist refresh completed: %v rules loaded", stats["total_rules"])
+
+	// Clear DNS cache so refreshed rules take effect immediately
+	s.dns.ClearCache()
+
 	jsonResponse(w, map[string]interface{}{
 		"status": "ok",
 		"stats":  stats,
@@ -329,6 +336,7 @@ func (s *Server) handleBlocklistAdd(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[API] Filter refresh error: %v", err)
 		}
 	}()
+	s.dns.ClearCache()
 
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
@@ -356,6 +364,7 @@ func (s *Server) handleWhitelistAdd(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[API] Filter refresh error: %v", err)
 		}
 	}()
+	s.dns.ClearCache()
 
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
@@ -394,6 +403,7 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[API] Filter refresh error: %v", err)
 			}
 		}()
+		s.dns.ClearCache()
 
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
@@ -425,6 +435,7 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[API] Filter refresh error: %v", err)
 			}
 		}()
+		s.dns.ClearCache()
 
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
@@ -467,6 +478,7 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[API] Filter refresh error: %v", err)
 			}
 		}()
+		s.dns.ClearCache()
 
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
@@ -492,6 +504,7 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 				log.Printf("[API] Filter refresh error: %v", err)
 			}
 		}()
+		s.dns.ClearCache()
 
 		jsonResponse(w, map[string]string{"status": "ok"})
 		return
@@ -550,6 +563,10 @@ func (s *Server) handleClients(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Update(func(cfg *config.Config) {
 			cfg.Clients = append(cfg.Clients, client)
 		})
+
+		// Clear DNS cache so per-client filtering settings take effect
+		s.dns.ClearCache()
+
 		jsonResponse(w, map[string]string{"status": "ok"})
 
 	default:
@@ -574,6 +591,10 @@ func (s *Server) handleClientAction(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Update(func(cfg *config.Config) {
 		cfg.Clients = append(cfg.Clients[:index], cfg.Clients[index+1:]...)
 	})
+
+	// Clear DNS cache so per-client filtering changes take effect
+	s.dns.ClearCache()
+
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
 
@@ -963,13 +984,18 @@ func (s *Server) handleQueryLogExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// CSV export
-	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", "attachment; filename=querylog.csv")
+	// Write BOM for Excel compatibility
+	w.Write([]byte{0xEF, 0xBB, 0xBF})
 	fmt.Fprintln(w, "Timestamp,Domain,Type,Client IP,Blocked,Reason,Duration")
 	for _, e := range entries {
-		fmt.Fprintf(w, "%s,%s,%s,%s,%t,%s,%s\n",
+		fmt.Fprintf(w, "%s,\"%s\",\"%s\",%s,%t,\"%s\",\"%s\"\n",
 			e.Timestamp.Format("2006-01-02 15:04:05"),
-			e.Domain, e.Type, e.ClientIP, e.Blocked, e.Reason, e.Duration)
+			strings.ReplaceAll(e.Domain, "\"", "\"\""),
+			e.Type, e.ClientIP, e.Blocked,
+			strings.ReplaceAll(e.Reason, "\"", "\"\""),
+			strings.ReplaceAll(e.Duration, "\"", "\"\""))
 	}
 }
 
@@ -1112,6 +1138,17 @@ func (s *Server) handleConfigRestore(w http.ResponseWriter, r *http.Request) {
 	})
 
 	log.Println("[API] Configuration restored from backup")
+
+	// Refresh filters and clear cache after restoring config
+	go func() {
+		log.Println("[API] Refreshing filters after config restore...")
+		if err := s.filter.Refresh(); err != nil {
+			log.Printf("[API] Filter refresh error: %v", err)
+		}
+	}()
+	s.filter.RefreshSafeSearch()
+	s.dns.ClearCache()
+
 	jsonResponse(w, map[string]string{"status": "ok", "message": "Configuration restored. Restart recommended."})
 }
 

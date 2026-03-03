@@ -6,9 +6,11 @@
 
 const API_BASE = '';
 let statsRefreshInterval = null;
+let qlRefreshInterval = null;
 let queriesChart = null;
 let queryTypesChart = null;
 let authToken = localStorage.getItem('sowa_token') || '';
+let currentPage = 'dashboard';
 
 // ==================== Auth ====================
 
@@ -319,6 +321,7 @@ function initNavigation() {
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             const page = item.dataset.page;
+            currentPage = page;
 
             navItems.forEach(n => n.classList.remove('active'));
             item.classList.add('active');
@@ -330,6 +333,9 @@ function initNavigation() {
             document.getElementById('pageTitle').textContent = item.querySelector('span').textContent;
             sidebar.classList.remove('open');
             loadPageData(page);
+
+            // Manage query log auto-refresh
+            startQueryLogRefresh(page === 'querylog');
         });
     });
 
@@ -987,8 +993,21 @@ function initForms() {
     document.getElementById('queryLogSearch')?.addEventListener('input', debounce(() => { qlCurrentPage = 0; loadQueryLog(); }, 400));
     document.getElementById('qlPrevPage')?.addEventListener('click', () => { if (qlCurrentPage > 0) { qlCurrentPage--; loadQueryLog(); } });
     document.getElementById('qlNextPage')?.addEventListener('click', () => { qlCurrentPage++; loadQueryLog(); });
-    document.getElementById('exportQueryLog')?.addEventListener('click', () => {
-        window.open(`${API_BASE}/api/querylog/export?format=csv`, '_blank');
+    document.getElementById('exportQueryLog')?.addEventListener('click', async () => {
+        try {
+            const resp = await apiFetch('/api/querylog/export?format=csv');
+            if (!resp.ok) throw new Error('Export failed');
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `querylog-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Query log exported', 'success');
+        } catch (e) {
+            if (e.message !== 'Unauthorized') showToast('Failed to export query log', 'error');
+        }
     });
     document.getElementById('clearQueryLog')?.addEventListener('click', clearQueryLog);
 
@@ -1700,6 +1719,16 @@ function showToast(message, type = 'info') {
 function startAutoRefresh() {
     if (statsRefreshInterval) clearInterval(statsRefreshInterval);
     statsRefreshInterval = setInterval(loadDashboard, 10000);
+}
+
+function startQueryLogRefresh(active) {
+    if (qlRefreshInterval) {
+        clearInterval(qlRefreshInterval);
+        qlRefreshInterval = null;
+    }
+    if (active) {
+        qlRefreshInterval = setInterval(loadQueryLog, 5000);
+    }
 }
 
 function formatNumber(num) {

@@ -344,13 +344,28 @@ func (s *Server) Stop() error {
 // isUpstreamDomain checks if a domain is used by an upstream DNS server.
 // These domains must never be filtered/blocked to avoid breaking DNS resolution.
 func (s *Server) isUpstreamDomain(domain string) bool {
-	for _, upstream := range s.cfg.DNS.Upstreams {
-		if strings.HasPrefix(upstream, "https://") {
+	// Check both primary upstreams and fallback servers
+	allServers := make([]string, 0, len(s.cfg.DNS.Upstreams)+len(s.cfg.DNS.FallbackServers))
+	allServers = append(allServers, s.cfg.DNS.Upstreams...)
+	allServers = append(allServers, s.cfg.DNS.FallbackServers...)
+
+	for _, upstream := range allServers {
+		var host string
+		switch {
+		case strings.HasPrefix(upstream, "https://"):
 			if u, err := url.Parse(upstream); err == nil {
-				if strings.TrimSuffix(u.Hostname(), ".") == domain {
-					return true
-				}
+				host = u.Hostname()
 			}
+		case strings.HasPrefix(upstream, "tls://"):
+			addr := strings.TrimPrefix(upstream, "tls://")
+			if h, _, err := net.SplitHostPort(addr); err == nil {
+				host = h
+			} else {
+				host = addr
+			}
+		}
+		if host != "" && strings.TrimSuffix(host, ".") == domain {
+			return true
 		}
 	}
 	return false
@@ -486,24 +501,24 @@ func (s *Server) writeBlockedResponse(w dns.ResponseWriter, r *dns.Msg, _ filter
 
 	switch question.Qtype {
 	case dns.TypeA:
-		// Return 0.0.0.0 for blocked domains
+		// Return 0.0.0.0 for blocked domains (TTL=1 so unblocking takes effect fast)
 		resp.Answer = append(resp.Answer, &dns.A{
 			Hdr: dns.RR_Header{
 				Name:   question.Name,
 				Rrtype: dns.TypeA,
 				Class:  dns.ClassINET,
-				Ttl:    300,
+				Ttl:    1,
 			},
 			A: net.ParseIP("0.0.0.0"),
 		})
 	case dns.TypeAAAA:
-		// Return :: for blocked domains
+		// Return :: for blocked domains (TTL=1 so unblocking takes effect fast)
 		resp.Answer = append(resp.Answer, &dns.AAAA{
 			Hdr: dns.RR_Header{
 				Name:   question.Name,
 				Rrtype: dns.TypeAAAA,
 				Class:  dns.ClassINET,
-				Ttl:    300,
+				Ttl:    1,
 			},
 			AAAA: net.ParseIP("::"),
 		})
@@ -613,8 +628,12 @@ func refuse(w dns.ResponseWriter, r *dns.Msg) {
 
 // getResponseTTL extracts TTL from response for caching
 func (s *Server) getResponseTTL(msg *dns.Msg) time.Duration {
-	minTTL := uint32(s.cfg.DNS.CacheTTLMax)
+	// If no answer records, use a short TTL to avoid caching empty responses too long
+	if len(msg.Answer) == 0 {
+		return time.Duration(s.cfg.DNS.CacheTTLMin) * time.Second
+	}
 
+	minTTL := uint32(s.cfg.DNS.CacheTTLMax)
 	for _, rr := range msg.Answer {
 		if rr.Header().Ttl < minTTL {
 			minTTL = rr.Header().Ttl

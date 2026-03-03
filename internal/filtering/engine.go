@@ -553,8 +553,76 @@ func (e *Engine) isWhitelisted(domain string) bool {
 	return false
 }
 
+// normalizeRuleDomain extracts a clean domain from an AdGuard-style rule or URL input.
+// Handles: ||domain.com^, http://domain.com/path, https://www.domain.com, etc.
+func normalizeRuleDomain(rule string) string {
+	s := rule
+
+	// Strip AdGuard-style prefixes/suffixes
+	s = strings.TrimPrefix(s, "||")
+	s = strings.TrimSuffix(s, "^")
+	s = strings.TrimSuffix(s, "$important")
+	if idx := strings.Index(s, "$"); idx > 0 {
+		s = s[:idx]
+	}
+
+	// Strip URL schemes
+	s = strings.TrimPrefix(s, "https://")
+	s = strings.TrimPrefix(s, "http://")
+
+	// Strip paths (everything after first /)
+	if idx := strings.Index(s, "/"); idx > 0 {
+		s = s[:idx]
+	}
+
+	// Strip port
+	if idx := strings.LastIndex(s, ":"); idx > 0 {
+		s = s[:idx]
+	}
+
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimSuffix(s, ".")
+
+	return s
+}
+
+// matchesDomainRule checks if a queried domain matches a rule domain.
+// It handles exact matches, subdomain matches, www-variant matches, and wildcards.
+func matchesDomainRule(domain, domainNoWWW, ruleDomain string) bool {
+	if ruleDomain == "" {
+		return false
+	}
+
+	// Handle wildcard patterns like *.domain.com
+	if strings.HasPrefix(ruleDomain, "*.") {
+		baseDomain := strings.TrimPrefix(ruleDomain, "*.")
+		baseNoWWW := strings.TrimPrefix(baseDomain, "www.")
+		return domain == baseDomain || domainNoWWW == baseNoWWW ||
+			strings.HasSuffix(domain, "."+baseNoWWW)
+	}
+
+	// Strip www from rule too for comparison
+	ruleNoWWW := strings.TrimPrefix(ruleDomain, "www.")
+
+	// Match exact domain (with and without www on both sides)
+	if domain == ruleDomain || domain == ruleNoWWW ||
+		domainNoWWW == ruleDomain || domainNoWWW == ruleNoWWW {
+		return true
+	}
+
+	// Match subdomains (e.g. sub.point.md matches rule point.md)
+	if strings.HasSuffix(domain, "."+ruleNoWWW) {
+		return true
+	}
+
+	return false
+}
+
 // checkCustomRules checks domain against custom user rules
 func (e *Engine) checkCustomRules(domain string) (string, bool) {
+	// Normalize domain — strip www. prefix for matching
+	domainNoWWW := strings.TrimPrefix(domain, "www.")
+
 	// First pass: check allow rules (@@)
 	for _, rule := range e.cfg.Filtering.CustomRules {
 		rule = strings.TrimSpace(rule)
@@ -565,19 +633,8 @@ func (e *Engine) checkCustomRules(domain string) (string, bool) {
 			continue
 		}
 
-		allowStr := strings.TrimPrefix(rule, "@@")
-		allowStr = strings.TrimPrefix(allowStr, "||")
-		allowStr = strings.TrimSuffix(allowStr, "^")
-		allowStr = strings.TrimSuffix(allowStr, "$important")
-		allowStr = strings.Split(allowStr, "$")[0]
-		allowStr = strings.ToLower(allowStr)
-
-		if strings.HasPrefix(allowStr, "*.") {
-			baseDomain := strings.TrimPrefix(allowStr, "*.")
-			if domain == baseDomain || strings.HasSuffix(domain, "."+baseDomain) {
-				return "", false // Explicitly allowed
-			}
-		} else if domain == allowStr || strings.HasSuffix(domain, "."+allowStr) {
+		allowDomain := normalizeRuleDomain(strings.TrimPrefix(rule, "@@"))
+		if matchesDomainRule(domain, domainNoWWW, allowDomain) {
 			return "", false // Explicitly allowed
 		}
 	}
@@ -589,23 +646,8 @@ func (e *Engine) checkCustomRules(domain string) (string, bool) {
 			continue
 		}
 
-		// Block rules
-		ruleStr := strings.TrimPrefix(rule, "||")
-		ruleStr = strings.TrimSuffix(ruleStr, "^")
-		ruleStr = strings.TrimSuffix(ruleStr, "$important")
-		ruleStr = strings.Split(ruleStr, "$")[0]
-		ruleStr = strings.ToLower(ruleStr)
-
-		// Handle wildcard patterns like *.domain.com
-		if strings.HasPrefix(ruleStr, "*.") {
-			baseDomain := strings.TrimPrefix(ruleStr, "*.")
-			if domain == baseDomain || strings.HasSuffix(domain, "."+baseDomain) {
-				return rule, true
-			}
-			continue
-		}
-
-		if domain == ruleStr || strings.HasSuffix(domain, "."+ruleStr) {
+		blockDomain := normalizeRuleDomain(rule)
+		if matchesDomainRule(domain, domainNoWWW, blockDomain) {
 			return rule, true
 		}
 	}

@@ -1180,16 +1180,21 @@ async function loadQueryLog() {
                     ? `<span style="color:var(--danger)"><i class="fas fa-ban"></i> Blocked (${escapeHtml(entry.reason)})</span>`
                     : `<span style="color:var(--success)"><i class="fas fa-check"></i> ${escapeHtml(entry.reason)}</span>`;
                 const dt = new Date(entry.timestamp);
-                const date = dt.toLocaleDateString(undefined, {month:'short', day:'numeric'});
-                const time = dt.toLocaleTimeString();
+                const timeAgo = formatRelativeTime(dt);
+                const fullTime = dt.toLocaleString();
                 const actionBtn = entry.blocked
                     ? `<button class="btn btn-xs btn-success" onclick="quickAllowDomain('${escapeHtml(entry.domain)}')" title="Allow this domain"><i class="fas fa-check"></i></button>`
                     : `<button class="btn btn-xs btn-danger" onclick="quickBlockDomain('${escapeHtml(entry.domain)}')" title="Block this domain"><i class="fas fa-ban"></i></button>`;
                 return `<tr class="${rowClass}">
-                    <td><span class="ql-date">${date}</span> ${time}</td>
-                    <td>${escapeHtml(entry.domain)}</td>
-                    <td>${escapeHtml(entry.type)}</td>
-                    <td>${escapeHtml(entry.client_ip)}</td>
+                    <td><span class="ql-time" title="${escapeHtml(fullTime)}">${timeAgo}</span></td>
+                    <td class="ql-domain-cell">
+                        <span class="ql-domain-name" title="Click to copy" onclick="copyText('${escapeHtml(entry.domain)}')">${escapeHtml(entry.domain)}</span>
+                        <span class="ql-whois-icon" data-domain="${escapeHtml(entry.domain)}" onmouseenter="showWhoisTooltip(event, this)" onmouseleave="hideWhoisTooltip()" title="WHOIS info">
+                            <i class="fas fa-info-circle"></i>
+                        </span>
+                    </td>
+                    <td><span class="ql-type-badge">${escapeHtml(entry.type)}</span></td>
+                    <td><span class="ql-client" title="Click to copy" onclick="copyText('${escapeHtml(entry.client_ip)}')">${escapeHtml(entry.client_ip)}</span></td>
                     <td>${status}</td>
                     <td>${escapeHtml(entry.duration)}</td>
                     <td>${actionBtn}</td>
@@ -1729,6 +1734,159 @@ function debounce(fn, delay) {
     };
 }
 
+// ==================== Relative Time Formatting ====================
+
+function formatRelativeTime(date) {
+    const now = new Date();
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDays = Math.floor(diffHr / 24);
+
+    if (diffSec < 5) return 'just now';
+    if (diffSec < 60) return `${diffSec}s ago`;
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ${diffMin % 60}m ago`;
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+// ==================== WHOIS Tooltip (Query Log) ====================
+
+const whoisCache = {};
+let activeWhoisTooltip = null;
+let whoisTooltipTimeout = null;
+
+async function showWhoisTooltip(event, element) {
+    const domain = element.dataset.domain;
+    if (!domain) return;
+
+    // Extract base domain (remove subdomains for WHOIS)
+    const parts = domain.split('.');
+    const baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : domain;
+
+    // Clear any pending hide
+    if (whoisTooltipTimeout) {
+        clearTimeout(whoisTooltipTimeout);
+        whoisTooltipTimeout = null;
+    }
+
+    // Remove existing tooltip
+    removeWhoisTooltip();
+
+    // Create tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'whois-tooltip';
+    tooltip.innerHTML = '<div class="whois-tooltip-loading"><i class="fas fa-spinner fa-spin"></i> Loading WHOIS...</div>';
+
+    // Position tooltip
+    const rect = element.getBoundingClientRect();
+    tooltip.style.position = 'fixed';
+    tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+    tooltip.style.top = (rect.bottom + 8) + 'px';
+
+    document.body.appendChild(tooltip);
+    activeWhoisTooltip = tooltip;
+
+    // Keep tooltip visible when hovering over it
+    tooltip.addEventListener('mouseenter', () => {
+        if (whoisTooltipTimeout) {
+            clearTimeout(whoisTooltipTimeout);
+            whoisTooltipTimeout = null;
+        }
+    });
+    tooltip.addEventListener('mouseleave', () => {
+        hideWhoisTooltip();
+    });
+
+    // Reposition if out of viewport
+    requestAnimationFrame(() => {
+        const tooltipRect = tooltip.getBoundingClientRect();
+        if (tooltipRect.right > window.innerWidth - 10) {
+            tooltip.style.left = (window.innerWidth - tooltipRect.width - 10) + 'px';
+        }
+        if (tooltipRect.bottom > window.innerHeight - 10) {
+            tooltip.style.top = (rect.top - tooltipRect.height - 8) + 'px';
+        }
+    });
+
+    // Fetch or use cache
+    if (whoisCache[baseDomain]) {
+        renderWhoisTooltip(tooltip, whoisCache[baseDomain]);
+        return;
+    }
+
+    try {
+        const resp = await apiFetch(`/api/whois?domain=${encodeURIComponent(baseDomain)}`);
+        if (!resp.ok) throw new Error('WHOIS lookup failed');
+        const data = await resp.json();
+        whoisCache[baseDomain] = data;
+
+        // Tooltip might have been removed already
+        if (activeWhoisTooltip === tooltip) {
+            renderWhoisTooltip(tooltip, data);
+        }
+    } catch (e) {
+        if (activeWhoisTooltip === tooltip) {
+            tooltip.innerHTML = '<div class="whois-tooltip-error"><i class="fas fa-exclamation-triangle"></i> WHOIS lookup failed</div>';
+        }
+    }
+}
+
+function renderWhoisTooltip(tooltip, data) {
+    if (data.error) {
+        tooltip.innerHTML = `<div class="whois-tooltip-error"><i class="fas fa-exclamation-triangle"></i> ${escapeHtml(data.error)}</div>`;
+        return;
+    }
+
+    const rows = [];
+    if (data.domain) rows.push(['Domain', data.domain]);
+    if (data.registrar) rows.push(['Registrar', data.registrar]);
+    if (data.organization) rows.push(['Organization', data.organization]);
+    if (data.country) rows.push(['Country', data.country]);
+    if (data.created) rows.push(['Created', data.created]);
+    if (data.expires) rows.push(['Expires', data.expires]);
+    if (data.dnssec) rows.push(['DNSSEC', data.dnssec]);
+    if (data.name_servers?.length) rows.push(['NS', data.name_servers.slice(0, 3).join(', ')]);
+
+    if (rows.length === 0) {
+        tooltip.innerHTML = '<div class="whois-tooltip-error">No WHOIS data available</div>';
+        return;
+    }
+
+    tooltip.innerHTML = `
+        <div class="whois-tooltip-header"><i class="fas fa-globe-americas"></i> WHOIS Info</div>
+        <div class="whois-tooltip-body">
+            ${rows.map(([label, value]) => `
+                <div class="whois-tooltip-row">
+                    <span class="whois-tooltip-label">${escapeHtml(label)}</span>
+                    <span class="whois-tooltip-value">${escapeHtml(value)}</span>
+                </div>
+            `).join('')}
+        </div>
+        <div class="whois-tooltip-footer">
+            <a href="#" onclick="event.preventDefault();document.getElementById('whoisDomain').value='${escapeHtml(data.domain || '')}';navigateToPage('filters');lookupWhois('${escapeHtml(data.domain || '')}');">
+                <i class="fas fa-external-link-alt"></i> Full WHOIS
+            </a>
+        </div>
+    `;
+}
+
+function hideWhoisTooltip() {
+    whoisTooltipTimeout = setTimeout(() => {
+        removeWhoisTooltip();
+    }, 200);
+}
+
+function removeWhoisTooltip() {
+    if (activeWhoisTooltip) {
+        activeWhoisTooltip.remove();
+        activeWhoisTooltip = null;
+    }
+}
+
 // ==================== Theme Toggle ====================
 
 function initTheme() {
@@ -1751,7 +1909,7 @@ function applyTheme(theme) {
         icon.className = theme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
     }
     if (label) {
-        label.textContent = theme === 'dark' ? 'Dark Mode' : 'Light Mode';
+        label.textContent = theme === 'dark' ? 'Night Mode' : 'Light Mode';
     }
 }
 

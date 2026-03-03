@@ -922,53 +922,25 @@ body {
 }
 
 .sidebar-footer {
-    padding: 12px 16px;
+    padding: 16px;
     border-top: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.sidebar-footer-links {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-}
-
-.sidebar-footer-links a {
+.sidebar-footer a {
     color: var(--text-muted);
     text-decoration: none;
     font-size: 12px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     transition: var(--transition);
     padding: 4px 0;
 }
 
-.sidebar-footer-links a:hover {
-    color: var(--accent-primary);
-}
-
-.sidebar-footer-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.sidebar-footer-actions a {
-    color: var(--text-muted);
-    text-decoration: none;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: var(--transition);
-    padding: 4px 8px;
-    border-radius: 6px;
-}
-
-.sidebar-footer-actions a:hover {
+.sidebar-footer a:hover {
     color: var(--accent-primary);
 }
 
@@ -2144,17 +2116,17 @@ h4 {
 .theme-toggle {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    gap: 8px;
+    padding: 8px 12px;
     cursor: pointer;
     color: var(--text-muted);
-    font-size: 12px;
-    border-radius: 6px;
+    font-size: 13px;
+    border-radius: 8px;
     transition: var(--transition);
-    border: 1px solid var(--border-color);
-    background: var(--bg-input);
+    border: none;
+    background: none;
+    width: 100%;
     font-family: inherit;
-    white-space: nowrap;
 }
 
 .theme-toggle:hover {
@@ -2573,3 +2545,247 @@ h4 {
 .stats-grid {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
+
+/* ==================== WHOIS Tooltip (Query Log) ==================== */
+.whois-tooltip {
+    position: fixed;
+    z-index: 10000;
+    min-width: 300px;
+    max-width: 400px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    animation: tooltipFadeIn 0.15s ease-out;
+    transform: translateX(-50%);
+}
+
+@keyframes tooltipFadeIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.whois-tooltip-header {
+    padding: 10px 14px;
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(0, 212, 255, 0.03));
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--accent-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.whois-tooltip-body {
+    padding: 8px 14px;
+}
+
+.whois-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0;
+    font-size: 0.8em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.whois-tooltip-row:last-child {
+    border-bottom: none;
+}
+
+.whois-tooltip-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.whois-tooltip-value {
+    color: var(--text-color);
+    text-align: right;
+    word-break: break-all;
+}
+
+.whois-tooltip-footer {
+    padding: 8px 14px;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.whois-tooltip-footer a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    font-size: 0.75em;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: var(--transition);
+}
+
+.whois-tooltip-footer a:hover {
+    text-decoration: underline;
+}
+
+.whois-tooltip-loading,
+.whois-tooltip-error {
+    padding: 16px;
+    text-align: center;
+    font-size: 0.8em;
+    color: var(--text-muted);
+}
+
+.whois-tooltip-error {
+    color: var(--danger);
+}
+
+/* ==================== Query Log Enhancements ==================== */
+.ql-domain-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ql-domain-name {
+    cursor: pointer;
+    transition: var(--transition);
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ql-domain-name:hover {
+    color: var(--accent-primary);
+}
+
+.ql-whois-icon {
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 0.2s ease, color 0.2s ease;
+    font-size: 0.85em;
+    flex-shrink: 0;
+}
+
+tr:hover .ql-whois-icon {
+    opacity: 1;
+}
+
+.ql-whois-icon:hover {
+    color: var(--accent-primary);
+}
+
+.ql-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    background: rgba(0, 212, 255, 0.1);
+    color: var(--accent-primary);
+    letter-spacing: 0.5px;
+}
+
+.ql-client {
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.ql-client:hover {
+    color: var(--accent-primary);
+}
+
+.ql-time {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ==================== Page Transition ==================== */
+/* Animation already defined on .page.active above */
+
+/* ==================== Card Hover Lift ==================== */
+.card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+    border-color: rgba(0, 212, 255, 0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* ==================== Stat Card Pulse ==================== */
+.stat-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ==================== Table Row Hover ==================== */
+.data-table tbody tr {
+    transition: background 0.15s ease;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(0, 212, 255, 0.04);
+}
+
+.data-table tbody tr.blocked-row:hover {
+    background: rgba(255, 68, 68, 0.06);
+}
+
+.data-table tbody tr.allowed-row:hover {
+    background: rgba(0, 212, 110, 0.04);
+}
+
+/* ==================== Status Dot Pulse ==================== */
+.status-dot.online {
+    animation: statusPulse 2s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 110, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(0, 212, 110, 0); }
+}
+
+/* ==================== Scrollbar Styling ==================== */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+/* ==================== Button Focus Ring ==================== */
+.btn:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+/* ==================== Nav Item Active Indicator ==================== */
+/* Already defined in sidebar section above */

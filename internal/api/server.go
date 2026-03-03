@@ -267,13 +267,16 @@ func (s *Server) handleProtectionToggle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	s.cfg.Filtering.Enabled = !s.cfg.Filtering.Enabled
-	s.cfg.Save()
+	var newState bool
+	s.cfg.Update(func(cfg *config.Config) {
+		cfg.Filtering.Enabled = !cfg.Filtering.Enabled
+		newState = cfg.Filtering.Enabled
+	})
 
 	// Clear DNS cache so the toggle takes effect immediately
 	s.dns.ClearCache()
 
-	jsonResponse(w, map[string]bool{"enabled": s.cfg.Filtering.Enabled})
+	jsonResponse(w, map[string]bool{"enabled": newState})
 }
 
 func (s *Server) handleFilteringStats(w http.ResponseWriter, r *http.Request) {
@@ -382,7 +385,7 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 	if len(parts) >= 5 && parts[len(parts)-1] == "toggle" {
 		indexStr := parts[len(parts)-2]
 		index, err := strconv.Atoi(indexStr)
-		if err != nil || index < 0 || index >= len(s.cfg.Filtering.BlockLists) {
+		if err != nil || index < 0 {
 			http.Error(w, "Invalid index", http.StatusBadRequest)
 			return
 		}
@@ -392,9 +395,15 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 		}
 		json.NewDecoder(r.Body).Decode(&body)
 
-		s.cfg.Update(func(cfg *config.Config) {
+		if err := s.cfg.Update(func(cfg *config.Config) {
+			if index >= len(cfg.Filtering.BlockLists) {
+				return
+			}
 			cfg.Filtering.BlockLists[index].Enabled = body.Enabled
-		})
+		}); err != nil {
+			http.Error(w, "Failed to update config", http.StatusInternalServerError)
+			return
+		}
 
 		// Auto-refresh filters after toggle
 		go func() {
@@ -413,20 +422,28 @@ func (s *Server) handleBlocklistAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "DELETE" {
 		indexStr := parts[len(parts)-1]
 		index, err := strconv.Atoi(indexStr)
-		if err != nil || index < 0 || index >= len(s.cfg.Filtering.BlockLists) {
+		if err != nil || index < 0 {
 			http.Error(w, "Invalid index", http.StatusBadRequest)
 			return
 		}
 
-		// Prevent deletion of default blocklists
-		if s.cfg.Filtering.BlockLists[index].Default {
-			http.Error(w, `{"error":"Cannot delete default blocklist. You can disable it instead."}`, http.StatusForbidden)
-			return
-		}
-
+		var deleteErr string
 		s.cfg.Update(func(cfg *config.Config) {
+			if index >= len(cfg.Filtering.BlockLists) {
+				deleteErr = "Invalid index"
+				return
+			}
+			if cfg.Filtering.BlockLists[index].Default {
+				deleteErr = "Cannot delete default blocklist. You can disable it instead."
+				return
+			}
 			cfg.Filtering.BlockLists = append(cfg.Filtering.BlockLists[:index], cfg.Filtering.BlockLists[index+1:]...)
 		})
+
+		if deleteErr != "" {
+			http.Error(w, `{"error":"`+deleteErr+`"}`, http.StatusBadRequest)
+			return
+		}
 
 		// Auto-refresh filters after deletion
 		go func() {
@@ -457,7 +474,7 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 	if len(parts) >= 5 && parts[len(parts)-1] == "toggle" {
 		indexStr := parts[len(parts)-2]
 		index, err := strconv.Atoi(indexStr)
-		if err != nil || index < 0 || index >= len(s.cfg.Filtering.WhiteLists) {
+		if err != nil || index < 0 {
 			http.Error(w, "Invalid index", http.StatusBadRequest)
 			return
 		}
@@ -468,7 +485,9 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&body)
 
 		s.cfg.Update(func(cfg *config.Config) {
-			cfg.Filtering.WhiteLists[index].Enabled = body.Enabled
+			if index < len(cfg.Filtering.WhiteLists) {
+				cfg.Filtering.WhiteLists[index].Enabled = body.Enabled
+			}
 		})
 
 		// Auto-refresh filters after whitelist toggle
@@ -488,14 +507,24 @@ func (s *Server) handleWhitelistAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "DELETE" {
 		indexStr := parts[len(parts)-1]
 		index, err := strconv.Atoi(indexStr)
-		if err != nil || index < 0 || index >= len(s.cfg.Filtering.WhiteLists) {
+		if err != nil || index < 0 {
 			http.Error(w, "Invalid index", http.StatusBadRequest)
 			return
 		}
 
+		var deleteErr string
 		s.cfg.Update(func(cfg *config.Config) {
+			if index >= len(cfg.Filtering.WhiteLists) {
+				deleteErr = "Invalid index"
+				return
+			}
 			cfg.Filtering.WhiteLists = append(cfg.Filtering.WhiteLists[:index], cfg.Filtering.WhiteLists[index+1:]...)
 		})
+
+		if deleteErr != "" {
+			http.Error(w, `{"error":"`+deleteErr+`"}`, http.StatusBadRequest)
+			return
+		}
 
 		// Auto-refresh filters after whitelist removal
 		go func() {
@@ -711,7 +740,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := strings.Split(r.RemoteAddr, ":")[0]
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
 	resp, err := s.auth.Login(req.Username, req.Password, ip, r.UserAgent())
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)

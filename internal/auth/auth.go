@@ -70,9 +70,11 @@ func (m *Manager) SetupPassword(username, password string) error {
 		return fmt.Errorf("password must be at least 4 characters")
 	}
 
-	m.cfg.Auth.Username = username
-	m.cfg.Auth.PasswordHash = hashPassword(password)
-	return m.cfg.Save()
+	hash := hashPassword(password)
+	return m.cfg.Update(func(cfg *config.Config) {
+		cfg.Auth.Username = username
+		cfg.Auth.PasswordHash = hash
+	})
 }
 
 // Login validates credentials and creates a session
@@ -226,14 +228,21 @@ func (m *Manager) ChangePassword(oldPassword, newPassword string) error {
 	if len(newPassword) < 4 {
 		return fmt.Errorf("new password must be at least 4 characters")
 	}
-	m.cfg.Auth.PasswordHash = hashPassword(newPassword)
+
+	hash := hashPassword(newPassword)
+	err := m.cfg.Update(func(cfg *config.Config) {
+		cfg.Auth.PasswordHash = hash
+	})
+	if err != nil {
+		return err
+	}
 
 	// Invalidate all sessions
 	m.mu.Lock()
 	m.sessions = make(map[string]*Session)
 	m.mu.Unlock()
 
-	return m.cfg.Save()
+	return nil
 }
 
 // cleanupLoop removes expired sessions periodically

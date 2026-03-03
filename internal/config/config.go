@@ -389,16 +389,16 @@ func Load(path string) (*Config, error) {
 // Save writes configuration to disk
 func (c *Config) Save() error {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	data, err := json.MarshalIndent(c, "", "  ")
+	c.mu.RUnlock()
+
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
 
 	dir := filepath.Dir(configPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	return os.WriteFile(configPath, data, 0644)
@@ -408,6 +408,17 @@ func (c *Config) Save() error {
 func (c *Config) Update(fn func(*Config)) error {
 	c.mu.Lock()
 	fn(c)
+	data, err := json.MarshalIndent(c, "", "  ")
 	c.mu.Unlock()
-	return c.Save()
+
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	return os.WriteFile(configPath, data, 0644)
 }

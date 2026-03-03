@@ -25,7 +25,17 @@ async function checkAuth() {
 
         if (!data.configured) {
             // First time setup - show wizard
+            localStorage.removeItem('sowa_wizard_done');
             showLoginScreen('setup');
+            return;
+        }
+
+        // If wizard was not completed, resume it
+        if (!localStorage.getItem('sowa_wizard_done') && data.authenticated) {
+            showLoginScreen('setup');
+            const savedStep = parseInt(localStorage.getItem('sowa_wizard_step')) || 3;
+            wizardNext(savedStep);
+            loadServerInfo();
             return;
         }
 
@@ -71,6 +81,7 @@ let currentWizardStep = 1;
 
 function wizardNext(step) {
     currentWizardStep = step;
+    localStorage.setItem('sowa_wizard_step', step);
 
     // Update progress indicators
     document.querySelectorAll('.wizard-step').forEach(el => {
@@ -206,6 +217,8 @@ function initLoginForms() {
 
     // Wizard finish → open dashboard
     document.getElementById('wizardFinish')?.addEventListener('click', () => {
+        localStorage.setItem('sowa_wizard_done', '1');
+        localStorage.removeItem('sowa_wizard_step');
         showApp();
     });
 
@@ -228,6 +241,8 @@ function initLoginForms() {
                     authToken = data.token;
                     localStorage.setItem('sowa_token', authToken);
                 }
+                localStorage.setItem('sowa_wizard_done', '1');
+                localStorage.removeItem('sowa_wizard_step');
                 hideLoginError();
                 showApp();
             } else {
@@ -451,6 +466,7 @@ async function loadDashboard() {
             animateNumber('totalQueries', data.total_queries || 0);
             animateNumber('blockedQueries', data.blocked_queries || 0);
             animateNumber('cachedQueries', data.cached_queries || 0);
+            animateNumber('rateLimitedQueries', data.rate_limited_queries || 0);
 
             const percentage = data.total_queries > 0
                 ? ((data.blocked_queries / data.total_queries) * 100).toFixed(1)
@@ -522,57 +538,63 @@ function updateCharts(data) {
         const hourlyQueries = data.hourly_queries || new Array(24).fill(0);
         const hourlyBlocked = data.hourly_blocked || new Array(24).fill(0);
 
-        if (queriesChart) queriesChart.destroy();
-        queriesChart = new Chart(ctx1, {
-            type: 'line',
-            data: {
-                labels: hours,
-                datasets: [{
-                    label: 'Total Queries',
-                    data: hourlyQueries,
-                    borderColor: '#00d4ff',
-                    backgroundColor: 'rgba(0, 212, 255, 0.08)',
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    pointHoverRadius: 4,
-                    pointHoverBackgroundColor: '#00d4ff',
-                }, {
-                    label: 'Blocked',
-                    data: hourlyBlocked,
-                    borderColor: '#ff4466',
-                    backgroundColor: 'rgba(255, 68, 102, 0.08)',
-                    fill: true,
-                    tension: 0.4,
-                    borderWidth: 2,
-                    pointRadius: 0,
-                    pointHoverRadius: 4,
-                    pointHoverBackgroundColor: '#ff4466',
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { intersect: false, mode: 'index' },
-                plugins: {
-                    legend: { labels: { color: '#8888aa', font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } },
-                    tooltip: {
-                        backgroundColor: 'rgba(26, 26, 46, 0.95)',
-                        titleColor: '#e0e0e8',
-                        bodyColor: '#8888aa',
-                        borderColor: '#2a2a45',
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        padding: 12,
-                    }
+        if (queriesChart) {
+            // Update data in-place to preserve legend toggle state
+            queriesChart.data.datasets[0].data = hourlyQueries;
+            queriesChart.data.datasets[1].data = hourlyBlocked;
+            queriesChart.update('none'); // 'none' = no animation on update
+        } else {
+            queriesChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: hours,
+                    datasets: [{
+                        label: 'Total Queries',
+                        data: hourlyQueries,
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.08)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: '#00d4ff',
+                    }, {
+                        label: 'Blocked',
+                        data: hourlyBlocked,
+                        borderColor: '#ff4466',
+                        backgroundColor: 'rgba(255, 68, 102, 0.08)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: '#ff4466',
+                    }]
                 },
-                scales: {
-                    x: { ticks: { color: '#555577', font: { size: 10 } }, grid: { color: 'rgba(42,42,69,0.3)' } },
-                    y: { ticks: { color: '#555577', font: { size: 10 } }, grid: { color: 'rgba(42,42,69,0.3)' }, beginAtZero: true }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: {
+                        legend: { labels: { color: '#8888aa', font: { size: 11 }, usePointStyle: true, pointStyle: 'circle' } },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 26, 46, 0.95)',
+                            titleColor: '#e0e0e8',
+                            bodyColor: '#8888aa',
+                            borderColor: '#2a2a45',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            padding: 12,
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#555577', font: { size: 10 } }, grid: { color: 'rgba(42,42,69,0.3)' } },
+                        y: { ticks: { color: '#555577', font: { size: 10 } }, grid: { color: 'rgba(42,42,69,0.3)' }, beginAtZero: true }
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     const ctx2 = document.getElementById('queryTypesChart')?.getContext('2d');
@@ -581,42 +603,48 @@ function updateCharts(data) {
         const labels = Object.keys(queryTypes);
         const values = Object.values(queryTypes);
 
-        if (queryTypesChart) queryTypesChart.destroy();
-        queryTypesChart = new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-                labels: labels.length > 0 ? labels : ['No Data'],
-                datasets: [{
-                    data: values.length > 0 ? values : [1],
-                    backgroundColor: [
-                        '#00d4ff', '#7b2fff', '#ff4466', '#00ff88',
-                        '#ffaa00', '#ff66aa', '#00aaff', '#88ff00'
-                    ],
-                    borderWidth: 0,
-                    hoverOffset: 8,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '65%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { color: '#8888aa', font: { size: 11 }, padding: 12, usePointStyle: true, pointStyle: 'circle' }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(26, 26, 46, 0.95)',
-                        titleColor: '#e0e0e8',
-                        bodyColor: '#8888aa',
-                        borderColor: '#2a2a45',
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        padding: 12,
+        if (queryTypesChart) {
+            // Update data in-place to preserve legend toggle state
+            queryTypesChart.data.labels = labels.length > 0 ? labels : ['No Data'];
+            queryTypesChart.data.datasets[0].data = values.length > 0 ? values : [1];
+            queryTypesChart.update('none');
+        } else {
+            queryTypesChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.length > 0 ? labels : ['No Data'],
+                    datasets: [{
+                        data: values.length > 0 ? values : [1],
+                        backgroundColor: [
+                            '#00d4ff', '#7b2fff', '#ff4466', '#00ff88',
+                            '#ffaa00', '#ff66aa', '#00aaff', '#88ff00'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 8,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#8888aa', font: { size: 11 }, padding: 12, usePointStyle: true, pointStyle: 'circle' }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 26, 46, 0.95)',
+                            titleColor: '#e0e0e8',
+                            bodyColor: '#8888aa',
+                            borderColor: '#2a2a45',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            padding: 12,
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 }
 
@@ -760,7 +788,7 @@ function applyConfigToUI(cfg) {
     setValue('upstreamServers', (cfg.dns?.upstreams || []).join('\n'));
     setValue('bootstrapDns', (cfg.dns?.bootstrap_dns || []).join('\n'));
     setChecked('cacheEnabled', cfg.dns?.cache_enabled);
-    setValue('cacheSize', cfg.dns?.cache_size);
+    setValue('cacheSizeSetting', cfg.dns?.cache_size);
     setValue('cacheTTLMin', cfg.dns?.cache_ttl_min);
     setValue('cacheTTLMax', cfg.dns?.cache_ttl_max);
     setValue('rateLimit', cfg.dns?.rate_limit);
@@ -793,6 +821,48 @@ function applyConfigToUI(cfg) {
     // Auto-update interval
     const auEl = document.getElementById('autoUpdateInterval');
     if (auEl) auEl.value = String(cfg.filtering?.auto_update_interval ?? 24);
+
+    // DNS Server Addresses info box
+    loadDNSAddresses();
+}
+
+async function loadDNSAddresses() {
+    try {
+        if (!serverInfo) {
+            const resp = await apiFetch('/api/system/info');
+            if (resp.ok) serverInfo = await resp.json();
+        }
+        if (serverInfo) {
+            const ip = serverInfo.ips?.[0] || '127.0.0.1';
+            const dnsPort = serverInfo.dns_port || 53;
+            const webPort = serverInfo.web_port || 8080;
+
+            const ipv4El = document.getElementById('dnsServerIPv4');
+            const portEl = document.getElementById('dnsServerPort');
+            const webEl = document.getElementById('dnsServerWeb');
+
+            if (ipv4El) ipv4El.textContent = ip;
+            if (portEl) portEl.textContent = dnsPort;
+            if (webEl) webEl.textContent = `http://${ip}:${webPort}`;
+
+            // If there are multiple IPs, show them all
+            const grid = document.getElementById('dnsAddressesGrid');
+            if (grid && serverInfo.ips && serverInfo.ips.length > 1) {
+                // Add additional IPs
+                serverInfo.ips.slice(1).forEach(extraIp => {
+                    if (!document.getElementById('dnsAddr-' + extraIp)) {
+                        const item = document.createElement('div');
+                        item.className = 'dns-addr-item';
+                        item.id = 'dnsAddr-' + extraIp;
+                        item.innerHTML = `<span class="dns-addr-label">IPv4 Address</span><span class="dns-addr-value">${escapeHtml(extraIp)}</span>`;
+                        grid.appendChild(item);
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to load DNS addresses:', e);
+    }
 }
 
 // ==================== Form Handlers ====================
@@ -822,7 +892,7 @@ function initForms() {
             const resp = await apiFetch('/api/auth/password', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ current_password: current, new_password: newPass })
+                body: JSON.stringify({ old_password: current, new_password: newPass })
             });
             if (resp.ok) {
                 showToast('Password changed successfully. Please login again.', 'success');
@@ -849,7 +919,7 @@ function initForms() {
                 upstreams: getLines('upstreamServers'),
                 bootstrap_dns: getLines('bootstrapDns'),
                 cache_enabled: getChecked('cacheEnabled'),
-                cache_size: parseInt(getValue('cacheSize')),
+                cache_size: parseInt(getValue('cacheSizeSetting')),
                 cache_ttl_min: parseInt(getValue('cacheTTLMin')),
                 cache_ttl_max: parseInt(getValue('cacheTTLMax')),
                 rate_limit: parseInt(getValue('rateLimit'))
@@ -982,6 +1052,9 @@ function initForms() {
 
     // Test upstream DNS
     document.getElementById('testUpstreams')?.addEventListener('click', testUpstreamServers);
+
+    // Dashboard upstream ping
+    document.getElementById('pingUpstreams')?.addEventListener('click', pingUpstreamsDashboard);
 
     // WHOIS lookup
     document.getElementById('whoisBtn')?.addEventListener('click', () => {
@@ -2234,6 +2307,50 @@ async function testUpstreamServers() {
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-vial"></i> Test Upstream Servers';
+        }
+    }
+}
+
+async function pingUpstreamsDashboard() {
+    const btn = document.getElementById('pingUpstreams');
+    const container = document.getElementById('upstreamLatencyList');
+    if (!container) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    }
+
+    try {
+        const resp = await apiFetch('/api/upstream/test', { method: 'POST' });
+        if (!resp.ok) throw new Error('Test failed');
+        const data = await resp.json();
+        const results = data.results || [];
+
+        container.innerHTML = results.map(r => {
+            const isOk = r.status === 'ok';
+            const latColor = r.latency_ms < 50 ? 'var(--success)' : r.latency_ms < 150 ? 'var(--warning, #ffaa00)' : 'var(--danger)';
+            return `
+                <div class="upstream-latency-item">
+                    <div class="upstream-latency-server">
+                        <i class="fas fa-${isOk ? 'check-circle' : 'times-circle'}" style="color:${isOk ? 'var(--success)' : 'var(--danger)'}"></i>
+                        <span>${escapeHtml(r.server)}</span>
+                    </div>
+                    <div class="upstream-latency-bar-wrap">
+                        <div class="upstream-latency-bar" style="width:${Math.min(r.latency_ms / 3, 100)}%;background:${latColor}"></div>
+                    </div>
+                    <span class="upstream-latency-ms" style="color:${latColor}">${r.latency_ms.toFixed(1)}ms</span>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        if (e.message !== 'Unauthorized') {
+            container.innerHTML = '<p class="text-muted">Failed to test upstream servers</p>';
+        }
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Test';
         }
     }
 }

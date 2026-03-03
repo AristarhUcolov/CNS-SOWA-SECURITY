@@ -163,6 +163,14 @@ func (c *Collector) processRecord(record QueryRecord) {
 	c.stats.TotalQueries++
 	c.stats.LastQuery = record.Timestamp
 
+	// Reset hourly arrays at the start of a new day (must be BEFORE incrementing)
+	day := record.Timestamp.YearDay()
+	if c.stats.LastHourlyResetDay != 0 && day != c.stats.LastHourlyResetDay {
+		c.stats.HourlyQueries = [24]int64{}
+		c.stats.HourlyBlocked = [24]int64{}
+	}
+	c.stats.LastHourlyResetDay = day
+
 	hour := record.Timestamp.Hour()
 	c.stats.HourlyQueries[hour]++
 
@@ -178,14 +186,6 @@ func (c *Collector) processRecord(record QueryRecord) {
 	if record.Reason == "rate_limited" {
 		c.stats.RateLimitedQueries++
 	}
-
-	// Reset hourly arrays at the start of a new day
-	day := record.Timestamp.YearDay()
-	if c.stats.LastHourlyResetDay != 0 && day != c.stats.LastHourlyResetDay {
-		c.stats.HourlyQueries = [24]int64{}
-		c.stats.HourlyBlocked = [24]int64{}
-	}
-	c.stats.LastHourlyResetDay = day
 
 	c.stats.TopQueriedDomains[record.Domain]++
 	c.stats.TopClients[record.ClientIP]++
@@ -332,8 +332,6 @@ func (c *Collector) GetStats() Statistics {
 // Does NOT clear the query log — use ClearQueryLog() for that
 func (c *Collector) Reset() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	c.stats = &Statistics{
 		TopBlockedDomains: make(map[string]int64),
 		TopQueriedDomains: make(map[string]int64),
@@ -341,7 +339,10 @@ func (c *Collector) Reset() {
 		QueryTypes:        make(map[string]int64),
 		StartTime:         time.Now(),
 	}
+	c.mu.Unlock()
 
+	// save() acquires RLock internally — must be called AFTER releasing the write lock
+	// to avoid deadlock (RWMutex is not re-entrant in Go)
 	c.save()
 }
 

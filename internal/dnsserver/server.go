@@ -391,6 +391,14 @@ func (s *Server) handleDNS(w dns.ResponseWriter, r *dns.Msg) {
 	} else if addr, ok := w.RemoteAddr().(*net.TCPAddr); ok {
 		clientIP = addr.IP.String()
 	}
+	if clientIP == "" {
+		// Fallback: parse from raw address string
+		if host, _, err := net.SplitHostPort(w.RemoteAddr().String()); err == nil {
+			clientIP = host
+		} else {
+			clientIP = w.RemoteAddr().String()
+		}
+	}
 
 	// Check access control
 	if !s.checkAccess(clientIP) {

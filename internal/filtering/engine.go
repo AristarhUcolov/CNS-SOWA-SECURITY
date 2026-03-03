@@ -337,9 +337,11 @@ func (e *Engine) LoadBlockLists() error {
 				Rule:     domain,
 			}
 		}
-		e.totalRules += len(res.domains)
 		log.Printf("[Filter] Loaded blocklist '%s': %d domains", res.name, len(res.domains))
 	}
+
+	// Use actual unique domain count, not sum of all lists (avoids duplicates)
+	e.totalRules = len(e.blockedMap)
 
 	e.lastUpdate = time.Now()
 	return nil

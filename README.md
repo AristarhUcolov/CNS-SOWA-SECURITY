@@ -1,7 +1,7 @@
 # S.O.W.A Security Software
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AristarhUcolov/CNS-SOWA-DNS-BLACKLIST-FILTERING/main/blacklist/../README.md" alt="S.O.W.A" width="200">
+  <img src="https://github.com/user-attachments/assets/2ee846c2-b6e7-449b-ab8f-c2d097acd82b" alt="S.O.W.A" width="200">
 </p>
 
 <p align="center">
